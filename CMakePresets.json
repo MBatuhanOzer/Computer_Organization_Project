@@ -1,0 +1,34 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21 },
+  "configurePresets": [
+    {
+      "name": "od",
+      "displayName": "x64 /Od (clang-cl; yonergedeki -O0 karsiligi, Asama 2 ve 3 temeli)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-od",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_C_FLAGS_RELWITHDEBINFO": "/Zi /Od /Ob0"
+      }
+    },
+    {
+      "name": "o1",
+      "displayName": "x64 /O1 (clang-cl; Asama 4 izi ve Asama 2b karsilastirmasi)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-o1",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_C_FLAGS_RELWITHDEBINFO": "/Zi /O1"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "od", "displayName": "Build /Od", "configurePreset": "od" },
+    { "name": "o1", "displayName": "Build /O1", "configurePreset": "o1" }
+  ]
+}

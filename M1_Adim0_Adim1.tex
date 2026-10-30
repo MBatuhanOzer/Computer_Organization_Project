@@ -1,0 +1,505 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{fontspec}
+\usepackage[a4paper,margin=2.1cm]{geometry}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+
+\setmainfont{Times New Roman}
+\setmonofont{Consolas}[Scale=0.86]
+
+\newcommand{\tl}{\texttt}
+\renewcommand{\arraystretch}{1.22}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\raggedbottom
+
+\pagestyle{fancy}\fancyhf{}
+\lhead{\small CMPE3209 --- M1 Teslimi}
+\rhead{\small Mehmet Batuhan Özer --- 5001230025}
+\cfoot{\small \thepage}
+
+\begin{document}
+
+\begin{center}
+{\Large\bfseries CMPE3209 Computer Organization --- Dönem Projesi}\\[4pt]
+{\large M1: Adım 0 (Kişiye Özel Parametreler) ve Adım 1 (Görev Seçimi ve C Programı)}\\[8pt]
+\begin{tabular}{ll}
+Ad Soyad: & Mehmet Batuhan Özer\\
+Öğrenci numarası: & 5001230025\\
+Seçilen görev: & G5 --- Run-length sıkıştırma\\
+Teslim tarihi: & 2 Kasım 2026, Pazartesi\\
+\end{tabular}
+\end{center}
+
+\vspace{2pt}\hrule\vspace{8pt}
+
+\section*{0. Araç ve derleme bilgileri}
+
+\begin{longtable}{p{4.4cm}p{10.6cm}}
+\toprule
+\textbf{Alan} & \textbf{Değer}\\
+\midrule
+Seçilen ISA & x86-64 (Microsoft x64 ABI, PE/COFF)\\
+Derleyici & clang-cl (LLVM 21.1.8), MSVC 14.44.35207 araç zinciri\\
+Derleme sistemi & CMake 3.31.6 + Ninja 1.12.1, \tl{CMakeLists.txt} + \tl{CMakePresets.json}\\
+Derleme (\tl{-O0} karşılığı) & \tl{cmake -{}-preset od} $\rightarrow$ \tl{build-od/rle.exe} \quad (\tl{/Zi /Od /Ob0})\\
+Derleme (\tl{-O1}) & \tl{cmake -{}-preset o1} $\rightarrow$ \tl{build-o1/rle.exe} \quad (\tl{/Zi /O1})\\
+Linker bayrakları & \tl{/DYNAMICBASE:NO /INCREMENTAL:NO /MAP /DEBUG}\\
+Disassembler & \tl{llvm-objdump} 21.1.8, \tl{-{}-x86-asm-syntax=intel}\\
+Debugger & Visual Studio 2022 (değer okuma, kaynak seviyesinde stepping)\\
+Instruction izleyici & \tl{cdb.exe} 10.0.26100.6584 (Windows SDK) --- Bölüm 4'teki dinamik ölçüm\\
+Cache simülatörü & Aşama 4'te kendi yazacağım simülatör (kaynak kodu teslim edilecek)\\
+Git deposu adresi & \url{https://github.com/MBatuhanOzer/Computer_Organization_Project}\\
+E-posta & \tl{batuhanozer1042@gmail.com}\\
+\bottomrule
+\end{longtable}
+
+\textbf{Derleme bayrakları hakkında not.} MSVC tarzı sürücüde \tl{/Od} optimizasyon kapalı demektir
+ve yönergedeki \tl{-O0}'ın karşılığıdır; \tl{/O1} doğrudan karşılıktır. Raporun bütün adresleri
+şu üç linker ayarına bağlıdır:
+
+\begin{itemize}
+\item \tl{/DYNAMICBASE:NO} --- ASLR kapalı. Bu olmadan PE imajı her çalıştırmada farklı bir tabana
+yüklenir ve \tl{/MAP} dosyasındaki adresler ile debugger'da görülen adresler tutmaz
+(gcc'deki \tl{-no-pie} karşılığı).
+\item \tl{/INCREMENTAL:NO} --- artımlı linkleme kapalı. Açık olduğunda linker her fonksiyon için bir
+ILT thunk'ı üretir ve \tl{call rle\_encode} önce bir \tl{jmp}'e, oradan fonksiyona gider; Aşama 3'teki
+instruction cycle izleme tablosuna kaynakta bulunmayan sahte bir \tl{jmp} girerdi. Bu bayrakla
+\tl{call} doğrudan fonksiyonun kendisine gider.
+\item \tl{/MAP} --- sembol adresleri. PE imajında sembol tablosu bulunmadığı için \tl{llvm-objdump}
+fonksiyon adlarını tek başına gösteremez; kernel ve diziler bu dosyadan bulunur.
+\end{itemize}
+
+\section*{1. Adım 0 --- Kişiye özel parametreler}
+
+\subsection*{1.1 Taban büyüklükler}
+
+Yönergenin 2.~bölümü (s.~1): \textbf{d} = numaranın son hanesi, \textbf{D2} = son iki hane (00--99),
+\textbf{S} = tüm hanelerin toplamı. SID = 5001230025, haneleri 5, 0, 0, 1, 2, 3, 0, 0, 2, 5.
+
+\begin{longtable}{p{1.3cm}p{4.2cm}p{6.5cm}p{2.2cm}}
+\toprule
+\textbf{Sembol} & \textbf{Tanım (yönerge s.~1)} & \textbf{Hesap} & \textbf{Sonuç}\\
+\midrule
+d  & numaranın son hanesi  & 500123002\textbf{5}                      & \textbf{5}\\
+D2 & son iki hane (00--99) & 50012300\textbf{25}                      & \textbf{25}\\
+S  & hanelerin toplamı     & $5{+}0{+}0{+}1{+}2{+}3{+}0{+}0{+}2{+}5$  & \textbf{18}\\
+\bottomrule
+\end{longtable}
+
+\subsection*{1.2 Türetilen parametreler}
+
+Formüllerin tamamı yönergenin s.~2'deki parametre tablosundan alınmıştır. ``(varsayım)'' etiketi
+yönergenin kendi ifadesidir: \textit{``f, T1, T2 ve Nc varsayımsal model parametreleridir, ölçüm
+değildir.''} (s.~2)
+
+\begin{longtable}{p{2.9cm}p{4.9cm}p{4.2cm}p{3.1cm}}
+\toprule
+\textbf{Parametre} & \textbf{Formül (yönergeden)} & \textbf{Yerine koyma} & \textbf{Sonuç}\\
+\midrule
+\endhead
+Dizi boyu N & $N = 24 + (D2 \bmod 25)$ & $24 + (25 \bmod 25) = 24+0$ & \textbf{24 eleman}\\
+Cache konfig. & d'ye göre tablodan (s.~2) & d = 5 satırı & \textbf{256 B / 16 B line / 4-way / 16 line / 4 set}\\
+Write policy & d çift $\rightarrow$ write-back; d tek $\rightarrow$ write-through & d = 5, tek & \textbf{write-through}\\
+Interrupt anı k & $k = (S \bmod 7) + 3$ & $(18 \bmod 7)+3 = 4+3$ & \textbf{k = 7}\\
+Interrupt türü & S çift $\rightarrow$ Timer; S tek $\rightarrow$ I/O & S = 18, çift & \textbf{Timer}\\
+Saat frekansı f & $f = 1.0 + 0.1 \times d$ GHz & $1.0 + 0.1 \times 5$ & \textbf{1.5 GHz} (varsayım)\\
+Erişim süresi T2 & $T2 = 20 + 5 \times (d \bmod 4)$ cycle & $20 + 5 \times 1$ & \textbf{25 cycle} (varsayım)\\
+Erişim süresi T1 & $T1 = 1$ cycle & --- & \textbf{1 cycle} (varsayım)\\
+Çekirdek sayısı Nc & $Nc = 2 + (S \bmod 7)$ & $2 + 4$ & \textbf{6} (varsayım)\\
+\midrule
+Görev param. R & G5: $R = 2 + (SID \bmod 3)$ (s.~4) & hane toplamı 18, $3 \mid 18$ $\Rightarrow$ $SID \bmod 3 = 0$ & \textbf{R = 2}\\
+Görev param. B & G5: $B = 0$ (s.~4) & --- & \textbf{B = 0}\\
+\bottomrule
+\end{longtable}
+
+Türetilmiş: $\tau = 1/f = 1/(1{,}5\ \text{GHz}) = \mathbf{0{,}667\ \text{ns}}$ (Aşama 5a'da kullanılacak).
+
+\textbf{Cache satırının tutarlılık kontrolü.} $256\ \text{B} / 16\ \text{B} = 16$ line;
+$16\ \text{line} / 4\ \text{yol} = 4$ set --- yönergenin d = 5 satırındaki ``line sayısı 16,
+set sayısı 4'' değerleriyle örtüşüyor. \checkmark
+
+\subsection*{1.3 Adres alanlarının türetilmesi}
+
+Yönerge s.~8 (4b): \textit{``set-associative'de tag = s − d, set = d, word = w bit.''}
+Tutanak: \textit{``ISA'nın adres genişliği s + w bit; 64-bit ISA'da düşük 32 bit kullanılır.''}
+x86-64 için $s + w = 32$.
+
+\begin{longtable}{p{3.2cm}p{7.4cm}p{2.0cm}p{2.2cm}}
+\toprule
+\textbf{Alan} & \textbf{Türetme} & \textbf{Bit} & \textbf{Konum}\\
+\midrule
+Word (w)    & line boyu $= 16\ \text{B} = 2^4 \Rightarrow w = 4$ & \textbf{4}  & adres[3:0]\\
+s           & $s + w = 32 \Rightarrow s = 32 - 4$                & 28          & ---\\
+Set (d)     & set sayısı $= 4 = 2^2 \Rightarrow d = 2$           & \textbf{2}  & adres[5:4]\\
+Tag (s − d) & $28 - 2$                                           & \textbf{26} & adres[31:6]\\
+\midrule
+\textbf{Toplam} & $26 + 2 + 4$ & \textbf{32} & ---\\
+\bottomrule
+\end{longtable}
+
+4-way set-associative olduğu için \textit{line} değil \textit{set} alanı kullanılır. Direct mapping
+olsaydı $r = \log_2 16 = 4$ ve tag $= 28 - 4 = 24$ bit olurdu; bu değer Aşama 4e'nin mapping
+taramasında gerekecektir.
+
+\subsection*{1.4 SID'in programdaki biçimi}
+
+Yönerge s.~3: \textit{``Numara $2^{31}-1$'i aşıyorsa son 9 hanesi kullanılır.''}
+$5\,001\,230\,025 > 2\,147\,483\,647$ olduğundan son 9 hane:
+$\mathbf{SID_{program} = 1\,230\,025}$ = \tl{0x12C4C9}.
+
+Doğrulama: $\text{0x12C4C9} = 1048576 + 131072 + 49152 + 1024 + 192 + 9 = 1\,230\,025$ \checkmark
+
+Adım 0'daki d, D2 ve S \textbf{tam numaradan} hesaplanmıştır (bkz.\ Bölüm 5, Soru 2).
+
+\section*{2. Adım 1 --- Görev seçimi ve C programı}
+
+\subsection*{2.1 Görev seçimi}
+
+$\boxtimes$ \textbf{G5 --- Run-length sıkıştırma.} $R = 2$, $B = 0$ $\Rightarrow$ sembol alfabesi
+$\{0, 1\}$; dizi boyu $N = 24$.
+
+\subsection*{2.2 Çözüm tasarımı}
+
+Program üç global \tl{s32} dizisi üzerinde çalışır: \tl{v[24]} LCG ile üretilen $\{0,1\}$
+sembollerini, \tl{enc[24]} kodlanmış (değer, tekrar) çiftlerini, \tl{dec[24]} ise geri açılmış
+diziyi tutar. \tl{rle\_encode(n)} \tl{v} dizisini tek geçişte tarar; dış döngü her koşu için bir
+kez döner, iç döngü aynı sembolün tekrar sayısını sayar ve her koşu \tl{(v[i] << 8) | run}
+biçiminde tek bir 32-bit word'e paketlenerek \tl{enc} dizisine yazılır --- böylece shift, OR ve
+dizi store'u aynı satırda görünür hale gelir. \tl{rle\_decode(len)} bu paketleri \tl{>> 8} ve
+\tl{\& 0xFF} ile ayrıştırıp \tl{dec} dizisine açar; her iki fonksiyon da parametre alıp değer
+döndürür (Y3). Doğrulama iki aşamalıdır: önce eleman \textit{sayısı} (\tl{out == N}), sonra
+\tl{main} içindeki üçüncü geçişte eleman \textit{değerleri} karşılaştırılır. Veri yerleşimi
+bilinçli olarak üç ayrı global dizi şeklinde seçilmiştir: üç dizi 15 cache line'a karşılık gelir,
+256 B'lık cache ise 16 line tutar --- bu, 4-way set'lerden tam birinin taşmasını sağlayarak
+Aşama 4'te hem spatial locality'nin hem de conflict miss'in aynı iz üzerinde gözlenmesine imkân
+verir (bkz.\ Bölüm 4.2).
+
+\subsection*{2.3 C kaynak kodu}
+
+Dosya: \tl{main.c} --- tek dosya, C99, \textbf{55 satır kod} (toplam 70 satır; 9 boş satır ve
+6 yorum satırı hariç). Yönergenin 25--60 satır aralığı içindedir. Satır sayımı bu belgede
+``boş ve yalnızca yorum içeren satırlar hariç'' olarak tanımlanmıştır.
+
+Program \tl{s32} ve \tl{u32} typedef'lerini kullanır; bunlar sırasıyla \tl{int} ve
+\tl{unsigned int} takma adlarıdır, dolayısıyla yönergenin ``32 bitten geniş tamsayı türü''
+yasağına girmez ve üretilen makine kodunu değiştirmez. \tl{Y6}'nın istediği
+\tl{const int SID} bildirimi programda \tl{const s32 SID} olarak yer alır
+(\tl{s32} $\equiv$ \tl{int}).
+
+\textbf{Yasak yapı taraması} (yönerge s.~5):
+
+\begin{longtable}{p{7.0cm}p{8.0cm}}
+\toprule
+\textbf{Aranan} & \textbf{Sonuç}\\
+\midrule
+\tl{printf scanf puts} (kütüphane çağrısı) & bulunamadı\\
+\tl{float double} (kayan nokta)            & bulunamadı\\
+\tl{malloc calloc free} (dinamik bellek)   & bulunamadı\\
+\tl{long long int64 uint64} ($>32$ bit)    & bulunamadı\\
+\tl{\#include}                             & yok --- hiçbir başlık dosyası kullanılmaz\\
+\bottomrule
+\end{longtable}
+
+Derleme uyarısızdır: \tl{clang -std=c99 -pedantic-errors -Wall -Wextra} ve
+\tl{gcc -std=c99 -pedantic-errors -Wall -Wextra}. Yorumlar C99'un \tl{//} satır yorumu
+biçimindedir (C99 §6.4.9).
+
+\subsection*{2.4 Zorunlu yapı eşlemesi (Y1--Y7)}
+
+\begin{longtable}{p{0.7cm}p{4.2cm}p{2.0cm}p{7.6cm}}
+\toprule
+\textbf{\#} & \textbf{Zorunlu yapı} & \textbf{Satır no} & \textbf{Açıklama}\\
+\midrule
+\endhead
+Y1 & N elemanlı global int dizisi, en az iki geçiş & \textbf{15}; 56, 28, 64 & \tl{s32 v[N];} --- \tl{v} üzerinde üç geçiş: s.~56 yazma (1.), s.~28 okuma/kodlama (2.), s.~64 doğrulama (3.)\\
+Y2 & En az bir koşullu dallanma (if) & \textbf{30}; 65 & s.~30: \tl{v[i+run] == v[i]} koşu uzunluğunu belirler; s.~65: \tl{if (dec[i] != v[i])}\\
+Y3 & Parametre alan ve değer döndüren fonksiyon çağrısı & \textbf{24}, 39 (tanım); \textbf{60}, 61 (çağrı) & \tl{s32 rle\_encode(s32 n)} ve \tl{s32 rle\_decode(s32 len)}; her ikisi de parametre alır ve değer döndürür, dönen değer çağrı yerinde bir değişkene atanır\\
+Y4 & Toplama/çıkarma, çarpma veya shift, ve bit işlemi & \textbf{31}, 33, 43, 44, 62 & s.~31: \tl{<< 8} (shift) ve \tl{| run} (OR); s.~33: \tl{i += run} (toplama); s.~43: \tl{>> 8} (shift); s.~44: \tl{\& 0xFF} (AND); s.~62: \tl{100 * enc\_len} (çarpma)\\
+Y5 & Dizi elemanına en az bir yazma (store) & \textbf{58}, 31, 46 & \tl{v[i] = ...}, \tl{enc[k] = ...}, \tl{dec[o++] = ...}\\
+Y6 & \tl{const int SID} ve sonucu etkileyen hesapta kullanımı & \textbf{13} (tanım), \textbf{55} (kullanım) & \tl{const s32 SID = 1230025;} LCG'nin $x_0$ tohumudur $\Rightarrow$ tüm \tl{v} dizisini, dolayısıyla üç Y7 çıktısının tamamını belirler\\
+Y7 & Sonuç global değişkende tutulur & \textbf{19, 20, 21} & \tl{enc\_len}, \tl{ratio\_x100}, \tl{decode\_ok}\\
+\bottomrule
+\end{longtable}
+
+\subsection*{2.5 Program çıktıları}
+
+Adresler \tl{build-od/rle.map} dosyasından alınmıştır. Değerler program bittikten sonra
+Visual Studio 2022'nin Watch penceresinden okunmuştur; ekran görüntüsü depoda
+\tl{ss\_globals.png} dosyasındadır. Watch penceresi onlu taban kullanır
+(\tl{257} $=$ \tl{0x0101}, \tl{259} $=$ \tl{0x0103}) ve \tl{enc}'in tanımlı 24 elemanının
+tamamını gösterir; yalnızca ilk \tl{enc\_len} $= 11$ tanesi anlamlıdır.
+
+\begin{longtable}{p{3.0cm}p{2.9cm}p{6.3cm}p{2.6cm}}
+\toprule
+\textbf{Global değişken} & \textbf{Adres (hex)} & \textbf{Değer} & \textbf{Ekran görüntüsü}\\
+\midrule
+\tl{enc\_len}    & \tl{0x140075C60} & \textbf{11} \quad(\tl{0x0000000B}) & \tl{ss\_globals.png}\\
+\tl{ratio\_x100} & \tl{0x140075C64} & \textbf{45} \quad(\tl{0x0000002D}) & \tl{ss\_globals.png}\\
+\tl{decode\_ok}  & \tl{0x140075C68} & \textbf{1} \quad(\tl{0x00000001})  & \tl{ss\_globals.png}\\
+\tl{v[24]}       & \tl{0x140075C70} & \tl{0001 0001 0000 0111 0010 1110} & \tl{ss\_globals.png}\\
+\tl{enc[0..10]}  & \tl{0x140075CD0} & \tl{0003 0101 0003 0101 0005 0103 0002 0101 0001 0103 0001} & \tl{ss\_globals.png}\\
+\tl{dec[24]}     & \tl{0x140075D30} & \tl{v} ile birebir aynı & \tl{ss\_globals.png}\\
+\tl{SID}         & \tl{0x140062000} & \tl{0x12C4C9} = 1230025 & ---\\
+\bottomrule
+\end{longtable}
+
+\textbf{Koşuların elle doğrulanması.} \tl{v} koşulara ayrıldığında uzunluklar
+$3, 1, 3, 1, 5, 3, 2, 1, 1, 3, 1$; toplam $= 24$ \checkmark, koşu sayısı $= 11 =$ \tl{enc\_len}
+\checkmark. İlk çift: $(0 \ll 8)\,|\,3 = \text{0x0003}$ \checkmark.
+
+\textbf{\tl{ratio\_x100} beklentiyle karşılaştırma} (yönerge s.~4: \textit{``ratio\_x100 R = 2 için
+yaklaşık 50 \dots\ Öğrenci kendi sonucunu bu beklentiyle karşılaştırır ve farkı açıklar''}):
+$R = 2$ için beklenen koşu uzunluğu $R/(R-1) = 2$, beklenen koşu sayısı $24/2 = 12$ ve
+\tl{ratio\_x100} $\approx 50$. Ölçülen: 11 koşu, $\lfloor 100 \times 11 / 24 \rfloor = 45$.
+Fark, $N = 24$'ün küçüklüğünden kaynaklanan örneklem dalgalanmasıdır; koşu uzunlukları geometrik
+dağılımlıdır ve 24 elemanlık tek bir örnekte beklenen değerden $\pm1$--$2$ koşu sapma olağandır.
+
+\textbf{LCG hakkında not.} Yönergedeki $>> 16$ kaydırması kritik öneme sahiptir: $m = 2^{32}$
+modüllü bir LCG'de $i$'nci bitin periyodu en fazla $2^{i+1}$'dir, yani en düşük bit 0,1,0,1
+biçiminde değişir. $R = 2$ olduğu için \tl{\% R} tek bir bit seçer; kaydırma olmasaydı
+\tl{v} dizisi \tl{010101...} olur, her koşu 1 uzunluğunda olurdu ve \tl{ratio\_x100} 100 çıkardı.
+Kaydırma, zayıf alt 16 biti atıp iyi karışmış üst yarıdan örnekler.
+
+\subsection*{2.6 İzlenecek kernel}
+
+Programdaki iki fonksiyonun (\tl{rle\_encode}, \tl{rle\_decode}) gövdesi 50 instruction'ı aştığı
+için, çağrıyı içeren bir blok 12--20 instruction'lık pencereye sığmaz. Bu nedenle kernel bir
+fonksiyon \textbf{dönüşü} etrafında seçilmiştir; yönerge s.~5 buna izin verir:
+``\dots\ fonksiyon çağrısını \textbf{ya da} dönüşünü içermelidir''. Seçilen blok
+\tl{rle\_decode}'un epilogue'u ve \tl{ret}'i ile \tl{main}'deki izleyen deyimlerdir.
+
+\begin{longtable}{p{4.6cm}p{10.4cm}}
+\toprule
+\textbf{Alan} & \textbf{Değer}\\
+\midrule
+C satır aralığı & s.~49 (\tl{return o;}) ve s.~61--64\\
+Başlangıç / bitiş adresi & \tl{0x140001168} -- \tl{0x140001232}\\
+Dinamik instruction sayısı & \textbf{17} (yönerge aralığı: 12--20)\\
+Toplam boyut & 68 byte (instruction başına 1--8 byte)\\
+Hangi iterasyon & \tl{rle\_decode}'dan tek dönüş; doğrulama döngüsünün ilk testi ($i = 0$)\\
+\bottomrule
+\end{longtable}
+
+\begin{longtable}{p{0.7cm}p{2.3cm}p{6.5cm}p{5.1cm}}
+\toprule
+\textbf{\#} & \textbf{Adres} & \textbf{Instruction} & \textbf{Not}\\
+\midrule
+\endhead
+1  & \tl{0x140001168} & \tl{mov eax, dword ptr [rsp+0x10]} & \textbf{load} (dönüş değeri \tl{o})\\
+2  & \tl{0x14000116C} & \tl{add rsp, 0x18}                  & epilogue, frame yıkımı\\
+3  & \tl{0x140001170} & \tl{ret}                            & \textbf{fonksiyon dönüşü}\\
+4  & \tl{0x1400011F8} & \tl{mov dword ptr [rsp+0x28], eax}  & \textbf{store} (\tl{out})\\
+5  & \tl{0x1400011FC} & \tl{imul eax, dword ptr [rip+...], 0x64} & \textbf{ALU} (çarpma) + load (\tl{enc\_len})\\
+6  & \tl{0x140001203} & \tl{mov ecx, 0x18}                  & bölen = N\\
+\textbf{7} & \tl{0x140001208} & \tl{cdq}                    & \textbf{interrupt burada gelir (k = 7)}\\
+8  & \tl{0x140001209} & \tl{idiv ecx}                       & \textbf{ALU} (bölme)\\
+9  & \tl{0x14000120B} & \tl{mov dword ptr [rip+...], eax}   & \textbf{store} ($\rightarrow$ \tl{ratio\_x100})\\
+10 & \tl{0x140001211} & \tl{cmp dword ptr [rsp+0x28], 0x18} & load + karşılaştırma\\
+11 & \tl{0x140001216} & \tl{sete al}                        & bayrak maddeleştirme (branchless)\\
+12 & \tl{0x140001219} & \tl{and al, 0x1}                    & \textbf{ALU} (bit işlemi)\\
+13 & \tl{0x14000121B} & \tl{movzx eax, al}                  & sıfır genişletme\\
+14 & \tl{0x14000121E} & \tl{mov dword ptr [rip+...], eax}   & \textbf{store} ($\rightarrow$ \tl{decode\_ok})\\
+15 & \tl{0x140001224} & \tl{mov dword ptr [rsp+0x24], 0x0}  & döngü sayacı ilklendirme\\
+16 & \tl{0x14000122C} & \tl{cmp dword ptr [rsp+0x24], 0x18} & load + karşılaştırma\\
+17 & \tl{0x140001231} & \tl{jge 0x14000126C}                & \textbf{koşullu branch} (alınmaz: $0 < 24$)\\
+\bottomrule
+\end{longtable}
+
+\textbf{Yönergenin kernel şartlarının kontrolü} (s.~5):
+load \checkmark (\#1, \#5, \#10, \#16) --- store \checkmark (\#4, \#9, \#14) ---
+ALU \checkmark (\#5 \tl{imul}, \#8 \tl{idiv}, \#12 \tl{and}) ---
+koşullu branch \checkmark (\#17) --- fonksiyon dönüşü \checkmark (\#3).
+
+\textbf{$k = 7$ senaryosu (Aşama 3c girdisi).} Interrupt, kernel'in 7.~instruction'ı olan
+\tl{cdq} (\tl{0x140001208}) execute edilirken gelir; kaydedilecek PC = 8.~instruction'ın adresi =
+\tl{0x140001209}. \tl{cdq}, \tl{EAX}'i \tl{EDX:EAX} çiftine işaret genişletir ve bir sonraki
+\tl{idiv}'in bölüneni olarak hazırlar. Interrupt tam olarak işaret genişletme ile bölme
+\textit{arasında} geldiği için kaydedilen bağlamın hem \tl{EDX}'i hem \tl{EAX}'i içermesi
+zorunludur; aksi halde bölünen bozulur ve \tl{ratio\_x100} yanlış hesaplanır. Bu, Aşama 3c'deki
+``kaydedilen diğer durum bilgisi'' sorusuna somut bir cevap oluşturur.
+
+\section*{3. Seçilen ISA ve model varsayımları}
+
+Yönergenin 4.~bölümü (s.~5) ISA seçimini öğrenciye bırakır; x86-64 için elle kodlanacak minimum
+8 instruction'dır (sabit uzunluklu ISA'larda 10). Seçim: \textbf{x86-64}.
+
+Gerekçe: x86-64 assembly üzerinde çalışma deneyimim var ve Aşama 3, 4, 5'in tamamı okunan assembly
+üzerinde yürür. Ayrıca kernel'in 5.~instruction'ı
+(\tl{imul eax, dword ptr [rip+...], 0x64} = \tl{6b 05 7d 6d 09 00 64}) tek başına opcode, ModR/M,
+RIP-relative displacement ve 8-bit immediate alanlarını içerir; girdi üretimindeki
+\tl{imul eax, dword ptr [rsp+0x30], 0x19660d} ise opcode, ModR/M, SIB, disp8 ve imm32 alanlarının
+beşini birden gösterir --- yönergenin 2c maddesindeki ``prefix, opcode, ModR/M, SIB, displacement
+ve immediate alanları ayrı ayrı gösterilir'' şartı bu örneklerle karşılanacaktır. Son olarak
+bellek operandlı ALU instruction'ları (ör. \tl{add dword ptr [rsp+0x24], 0x1}) tek bir
+instruction olarak load + ALU + store yapar, yani üç bus işlemi üretir; tutanak 3a bunu açıkça
+destekler ve bu, Aşama 5b'deki architecture/organization tablosu için sabit uzunluklu bir RISC
+ISA'da bulunmayan malzeme sağlar.
+
+\subsection*{3.1 Modelin gerçek donanımdan ayrıldığı yerler}
+
+Yönergenin Aşama 3 modeli bilinçli bir basitleştirmedir. Raporda şu noktalar belirtilecektir:
+
+\begin{itemize}
+\item \textbf{PC, IR, MAR ve MBR yalnızca kavramsaldır} (yönerge s.~6). x86-64'te MAR ve MBR adlı
+mimari register yoktur; bunlar debugger'da okunamaz, instruction semantiğinden türetilir.
+3a tablosunun yalnızca PC ve değişen register sütunları gözlemdir, kalan sütunlar çıkarımdır.
+\item \textbf{Pipeline yok, her an tek instruction.} Gerçek bir x86-64 çekirdeği out-of-order ve
+superscalar çalışır; bu kernel'deki 17 instruction gerçek donanımda birkaç cycle'da biter.
+\item \textbf{Mikro-op ayrıştırması ve füzyon yok.} Bellek operandlı \tl{add} gerçek donanımda
+load + add + store mikro-op'larına ayrılır, \tl{cmp}+\tl{jge} çifti ise çoğu zaman
+makro-füzyonlanır; modelde her instruction bölünmeden, seri olarak ele alınır.
+\item \textbf{Gerçek line boyu 64 B, model 16 B.} Projede zorunlu tutulan 16 B gerçek L1D'nin
+dörtte biridir. Aşama 4e'nin line-boyu taraması 8/16/32/64 B'yi kapsadığı için gerçek değer
+zaten ölçülecek ve 16 B ile karşılaştırılacaktır.
+\item \textbf{Donanım prefetcher ve çok seviyeli hiyerarşi yok}; modelde tek seviyeli bir data
+cache vardır, instruction fetch'ler cache dışıdır (yönerge s.~2).
+\item \textbf{Data bus genişliği 64 bit} (x86-64 word'ü); adres alanı ayrıştırması ise adresin
+düşük 32 biti üzerinden yapılır.
+\end{itemize}
+
+\section*{4. Aşama 4'ün \tl{/O1} izi üzerinden yapılması talebi}
+
+Yönergenin ``Öğretim üyesi notları'' bölümü 6.~madde (s.~12): \textit{``\tl{-O0} izi stack'e
+boğulur. \tl{-O0} her değişkeni stack'e yazar; cache sonuçları dizi erişimlerinden çok stack
+trafiğini yansıtabilir. Alternatif: Aşama 4'te \tl{-O1} izini zorunlu tutmak. Pedagojik
+seçimdir; ilandan önce karar verilmeli.''}
+
+Bu programda fark ölçülmüştür. \textbf{Ölçüm yöntemi:} \tl{cdb} ile \tl{main}'e breakpoint konup
+program tek tek (\tl{t}) yürütülmüş, her adımda \tl{rip} kaydedilmiş; kayıtlar yalnızca kendi üç
+fonksiyonumuzun adres aralığına filtrelenip \tl{main}'in \tl{ret}'inde kesilmiş; ardından her
+adres \tl{llvm-objdump} çıktısıyla eşleştirilip bellek operandı bölgesine göre sınıflandırılmıştır
+(stack $=$ \tl{[rsp/rbp±N]}; dizi $=$ \tl{v/enc/dec}; global $=$ \tl{enc\_len/ratio\_x100/decode\_ok}).
+
+\begin{longtable}{p{6.2cm}rr}
+\toprule
+\textbf{Ölçü (dinamik, kendi kodumuz)} & \textbf{\tl{/Od}} & \textbf{\tl{/O1}}\\
+\midrule
+Yürütülen instruction sayısı & 2088 & 988\\
+Toplam data bellek referansı & 1152 & 173\\
+\midrule
+\quad stack referansı        & \textbf{961 (\%83{,}4)} & \textbf{17 (\%9{,}8)}\\
+\quad dizi referansı (\tl{v/enc/dec}) & 186 (\%16{,}1) & \textbf{152 (\%87{,}9)}\\
+\quad global referansı       & 5 (\%0{,}4) & 4 (\%2{,}3)\\
+\bottomrule
+\end{longtable}
+
+\tl{/Od}'de bellek referanslarının \textbf{\%83'ü stack frame'e} aittir; cache analizi büyük
+ölçüde dizilerin locality'sini değil, yerel değişkenlerin spill trafiğini ölçer. \tl{/O1}'de kalan
+17 stack referansı yalnızca kontrol akışına aittir (\tl{call}/\tl{ret} dönüş adresleri ve
+callee-saved register'lar) ve referansların \%88'i gerçek dizi erişimidir.
+
+\textbf{Tutarlılık kontrolü.} Her iki derlemede de dizi \textit{yazma} sayısı \textbf{59}'dur:
+24 (\tl{v}) $+$ 11 (\tl{enc}) $+$ 24 (\tl{dec}) $= 59$ --- elle türetilebilen bu değerin iki
+bağımsız optimizasyon seviyesinde aynı çıkması ölçümün doğruluğunu destekler.
+
+\textbf{Talep:} Aşama 4'ün (4a--4g) \tl{/O1} izi üzerinden yapılması. Aşama 2 ve Aşama 3
+yönergedeki gibi \tl{/Od} üzerinden yürütülecek, Aşama 2b karşılaştırması her iki sürümü de
+kapsamaya devam edecektir.
+
+\subsection*{4.1 Veri yerleşimi}
+
+\tl{/DYNAMICBASE:NO} ile sabitlenmiş yerleşim (\tl{/Od}). Diziler bildirim sırasına göre
+bitişiktir:
+
+\begin{longtable}{p{2.4cm}p{5.6cm}p{2.2cm}p{4.0cm}}
+\toprule
+\textbf{Dizi} & \textbf{Adres aralığı} & \textbf{Boyut} & \textbf{Kapladığı line (16 B)}\\
+\midrule
+\tl{v[24]}      & \tl{0x140075C70}--\tl{0x140075CCF} & 96 B & 6\\
+\tl{enc[0..10]} & \tl{0x140075CD0}--\tl{0x140075CFB} & 44 B & 3\\
+\tl{dec[24]}    & \tl{0x140075D30}--\tl{0x140075D8F} & 96 B & 6\\
+\bottomrule
+\end{longtable}
+
+\subsection*{4.2 Cache set haritası}
+
+Set $=$ adres[5:4]. 64-bit adreslerin düşük 32 biti kullanılır.
+
+\begin{longtable}{p{1.3cm}p{9.0cm}p{1.8cm}p{2.6cm}}
+\toprule
+\textbf{Set} & \textbf{Bu sete düşen line'lar} & \textbf{Sayı} & \textbf{4-way'e sığar mı?}\\
+\midrule
+0 & \tl{v@5C80}, \tl{v@5CC0}, \tl{dec@5D40}, \tl{dec@5D80} & 4 & tam dolar\\
+1 & \tl{v@5C90}, \tl{enc@5CD0}, \tl{dec@5D50} & 3 & evet\\
+2 & \tl{v@5CA0}, \tl{enc@5CE0}, \tl{dec@5D60} & 3 & evet\\
+3 & \tl{v@5C70}, \tl{v@5CB0}, \tl{enc@5CF0}, \tl{dec@5D30}, \tl{dec@5D70} & \textbf{5} & \textbf{HAYIR --- LRU eviction}\\
+\bottomrule
+\end{longtable}
+
+Toplam 15 line, kapasite 16 line. Bu $5/4/3/3$ dağılımı dört farklı yerleşimde (gcc \tl{-O0},
+gcc \tl{-O1}, clang-cl artımlı linkli, clang-cl \tl{/INCREMENTAL:NO}) aynı çıkmıştır; yalnızca
+\textit{hangi} setin taştığı değişir.
+Dolayısıyla bu, derleyiciye değil, 4 setlik bir cache karşısında üç adet 96 byte'lık dizinin
+yerleşimine ait bir özelliktir. Conflict miss'lerin tek bir sette yoğunlaşması Aşama 4c ve 4e için
+temiz ve açıklanabilir bir tablo verir.
+
+\textbf{Write policy'nin sonucu.} Write-through olduğu için 4c tablosundaki ``Dirty (write-back)''
+sütunu bu projede boştur (write-through'da dirty biti yoktur) ve ana belleğe yazma sayısı doğrudan
+store sayısına eşittir (yönerge s.~8). Write miss'te write-allocate varsayılır (yönerge s.~2).
+
+\section*{5. Öğretim üyesine sorular}
+
+\textbf{Soru 1 --- Aşama 4 izi \tl{/O1}'den alınabilir mi?} Bölüm 4'teki ölçümlere dayanarak
+talep edilmektedir.
+
+\textbf{Soru 2 --- d, D2 ve S hangi numaradan hesaplanacak?} Numaram $2^{31}-1$'i aştığı için
+yönerge programda son 9 hanenin kullanılmasını söylüyor (\tl{SID = 1230025}). Ancak d, D2 ve S'nin
+tam numaradan mı kısaltılmış numaradan mı hesaplanacağı belirtilmemiş:
+
+\begin{longtable}{p{4.6cm}p{4.6cm}p{4.6cm}}
+\toprule
+ & \textbf{Tam numara (5001230025)} & \textbf{Son 9 hane (1230025)}\\
+\midrule
+d & 5 & 5\\
+D2 & 25 & 25\\
+\textbf{S} & \textbf{18} & 13\\
+\textbf{k} & \textbf{7} & 6\\
+\textbf{Interrupt türü} & \textbf{Timer} (S çift) & I/O (S tek)\\
+\textbf{Nc} & \textbf{6} & 8\\
+\bottomrule
+\end{longtable}
+
+Bu teslimde \textbf{tam numara} esas alınmıştır (S $=$ 18, k $=$ 7, Timer, Nc $=$ 6); kısaltma
+yalnızca programdaki \tl{const s32 SID} sabitine uygulanmıştır. Yönerge d ve D2'yi ``numaranın''
+haneleri olarak tanımladığı ve kısaltmayı yalnızca program sabiti bağlamında andığı için bu okuma
+tercih edilmiştir. Onaylanması rica olunur: yanlış parametre, ona dayanan tüm adımları geçersiz
+kılmaktadır.
+
+\textbf{Soru 3 --- Değişken uzunluklu instruction'larda instruction fetch kaç bus işlemi sayılır?}
+Yönerge, instruction fetch'leri cache dışında tutuyor (s.~2) ama bus işlemi olarak saymamızı
+istiyor (s.~7, 3d.1). Aşama 3 modelinde data bus genişliği x86-64 için 64 bittir. Kernel'imin
+17 instruction'ı toplam 68 byte tutuyor ve instruction boyları 1 ile 8 byte arasında değişiyor
+(\tl{ret} 1 byte, \tl{mov dword ptr [rsp+0x24], 0x0} 8 byte). ``Instruction başına bir fetch''
+sayılırsa \textbf{17}, ``64-bit bus başına 8 byte'' sayılırsa yaklaşık \textbf{9} bus işlemi
+çıkıyor; ayrıca instruction'lar 8 byte sınırlarını aştığı için ikinci okuma temiz de değil.
+Sabit 32 bitlik bir ISA'da bu belirsizlik doğmuyor. Aksi belirtilmedikçe \textbf{instruction
+başına bir fetch bus işlemi} (Fig.~3.2 kavramsal modeli) varsayacağım ve gerçek bir x86 front
+end'inin 16--32 byte'lık bloklar getirdiğini model-fark paragrafında belirteceğim --- 3a ve 3d'yi
+bu varsayım üzerine kurmadan önce onay rica ediyorum.
+
+\section*{Ek --- Doğrulama komutları}
+
+\begin{verbatim}
+:: x64 Developer Command Prompt icinde (ya da dogrudan Visual Studio: Open Folder)
+cmake --preset od   &&  cmake --build --preset od     :: -> build-od/rle.exe
+cmake --preset o1   &&  cmake --build --preset o1     :: -> build-o1/rle.exe
+
+llvm-objdump -d --x86-asm-syntax=intel build-od\rle.exe > asm_O0.s
+llvm-objdump -d --x86-asm-syntax=intel build-o1\rle.exe > asm_O1.s
+findstr /C:"rle_encode" /C:"rle_decode" /C:"main" build-od\rle.map
+
+:: global degerleri bellekten okumak (L sayilari hex: L18 = 24, Lb = 11)
+cdb -c "bu rle!main; g; pt; dd rle!enc_len L3; dd rle!v L18; dd rle!enc Lb; dd rle!dec L18; q" ^
+    build-od\rle.exe
+
+:: standart C99 uyumlulugu
+clang -std=c99 -pedantic-errors -Wall -Wextra -c main.c
+\end{verbatim}
+
+\end{document}
