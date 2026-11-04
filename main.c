@@ -10,7 +10,7 @@
 typedef unsigned int u32;         // 32-bit unsigned
 typedef int s32;                  // 32-bit signed
 
-const s32 SID = 1230025;          // Y6: last 9 digits of 5001230025 (exceeds 2^31-1). Explicitely written signed 32 in instruction so... but will assign to unsigned anyway when using.
+const int SID = 1230025;          // Y6: last 9 digits of 5001230025 (exceeds 2^31-1). Kept as const int exactly as the assignment specifies; s32 is a typedef of int anyway.
 
 s32 v[N];                         // Y1: Original input array (global, 3 passes)
 s32 enc[N];                       // RLE Encoded Array

@@ -189,8 +189,7 @@ Dosya: \tl{main.c} --- tek dosya, C99, \textbf{55 satır kod} (toplam 70 satır;
 Program \tl{s32} ve \tl{u32} typedef'lerini kullanır; bunlar sırasıyla \tl{int} ve
 \tl{unsigned int} takma adlarıdır, dolayısıyla yönergenin ``32 bitten geniş tamsayı türü''
 yasağına girmez ve üretilen makine kodunu değiştirmez. \tl{Y6}'nın istediği
-\tl{const int SID} bildirimi programda \tl{const s32 SID} olarak yer alır
-(\tl{s32} $\equiv$ \tl{int}).
+\tl{const int SID} bildirimi programda birebir bu biçimde yer alır.
 
 \textbf{Yasak yapı taraması} (yönerge s.~5):
 
@@ -222,7 +221,7 @@ Y2 & En az bir koşullu dallanma (if) & \textbf{30}; 65 & s.~30: \tl{v[i+run] ==
 Y3 & Parametre alan ve değer döndüren fonksiyon çağrısı & \textbf{24}, 39 (tanım); \textbf{60}, 61 (çağrı) & \tl{s32 rle\_encode(s32 n)} ve \tl{s32 rle\_decode(s32 len)}; her ikisi de parametre alır ve değer döndürür, dönen değer çağrı yerinde bir değişkene atanır\\
 Y4 & Toplama/çıkarma, çarpma veya shift, ve bit işlemi & \textbf{31}, 33, 43, 44, 62 & s.~31: \tl{<< 8} (shift) ve \tl{| run} (OR); s.~33: \tl{i += run} (toplama); s.~43: \tl{>> 8} (shift); s.~44: \tl{\& 0xFF} (AND); s.~62: \tl{100 * enc\_len} (çarpma)\\
 Y5 & Dizi elemanına en az bir yazma (store) & \textbf{58}, 31, 46 & \tl{v[i] = ...}, \tl{enc[k] = ...}, \tl{dec[o++] = ...}\\
-Y6 & \tl{const int SID} ve sonucu etkileyen hesapta kullanımı & \textbf{13} (tanım), \textbf{55} (kullanım) & \tl{const s32 SID = 1230025;} LCG'nin $x_0$ tohumudur $\Rightarrow$ tüm \tl{v} dizisini, dolayısıyla üç Y7 çıktısının tamamını belirler\\
+Y6 & \tl{const int SID} ve sonucu etkileyen hesapta kullanımı & \textbf{13} (tanım), \textbf{55} (kullanım) & \tl{const int SID = 1230025;} LCG'nin $x_0$ tohumudur $\Rightarrow$ tüm \tl{v} dizisini, dolayısıyla üç Y7 çıktısının tamamını belirler\\
 Y7 & Sonuç global değişkende tutulur & \textbf{19, 20, 21} & \tl{enc\_len}, \tl{ratio\_x100}, \tl{decode\_ok}\\
 \bottomrule
 \end{longtable}
@@ -459,14 +458,14 @@ tam numaradan mı kısaltılmış numaradan mı hesaplanacağı belirtilmemiş:
 d & 5 & 5\\
 D2 & 25 & 25\\
 \textbf{S} & \textbf{18} & 13\\
-\textbf{k} & \textbf{7} & 6\\
+\textbf{k} & \textbf{7} & 9\\
 \textbf{Interrupt türü} & \textbf{Timer} (S çift) & I/O (S tek)\\
 \textbf{Nc} & \textbf{6} & 8\\
 \bottomrule
 \end{longtable}
 
 Bu teslimde \textbf{tam numara} esas alınmıştır (S $=$ 18, k $=$ 7, Timer, Nc $=$ 6); kısaltma
-yalnızca programdaki \tl{const s32 SID} sabitine uygulanmıştır. Yönerge d ve D2'yi ``numaranın''
+yalnızca programdaki \tl{const int SID} sabitine uygulanmıştır. Yönerge d ve D2'yi ``numaranın''
 haneleri olarak tanımladığı ve kısaltmayı yalnızca program sabiti bağlamında andığı için bu okuma
 tercih edilmiştir. Onaylanması rica olunur: yanlış parametre, ona dayanan tüm adımları geçersiz
 kılmaktadır.
