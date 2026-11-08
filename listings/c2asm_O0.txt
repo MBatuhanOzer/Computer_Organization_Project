@@ -1,0 +1,155 @@
+# C satiri -> assembly -> adres  (O0, build-od/rle.exe)
+# sutunlar: C satiri | adres | byte'lar | instruction
+
+<rle_encode>  @ 0x140001000
+   25  0x140001000  48 83 ec 18                    sub rsp, 0x18
+   25  0x140001004  89 4c 24 14                    mov dword ptr [rsp + 0x14], ecx
+   26  0x140001008  c7 44 24 10 00 00 00 00        mov dword ptr [rsp + 0x10], 0x0
+   27  0x140001010  c7 44 24 0c 00 00 00 00        mov dword ptr [rsp + 0xc], 0x0
+   28  0x140001018  8b 44 24 10                    mov eax, dword ptr [rsp + 0x10]
+   28  0x14000101C  3b 44 24 14                    cmp eax, dword ptr [rsp + 0x14]
+   28  0x140001020  0f 8d 9f 00 00 00              jge 0x1400010c5 <.text+0xc5>
+   29  0x140001026  c7 44 24 08 01 00 00 00        mov dword ptr [rsp + 0x8], 0x1
+   30  0x14000102E  8b 4c 24 10                    mov ecx, dword ptr [rsp + 0x10]
+   30  0x140001032  03 4c 24 08                    add ecx, dword ptr [rsp + 0x8]
+   30  0x140001036  31 c0                          xor eax, eax
+   30  0x140001038  3b 4c 24 14                    cmp ecx, dword ptr [rsp + 0x14]
+   30  0x14000103C  88 44 24 07                    mov byte ptr [rsp + 0x7], al
+   30  0x140001040  7d 2b                          jge 0x14000106d <.text+0x6d>
+   30  0x140001042  8b 44 24 10                    mov eax, dword ptr [rsp + 0x10]
+   30  0x140001046  03 44 24 08                    add eax, dword ptr [rsp + 0x8]
+   30  0x14000104A  48 63 c8                       movsxd rcx, eax
+   30  0x14000104D  48 8d 05 1c 4c 07 00           lea rax, [rip + 0x74c1c]    # 0x140075c70
+   30  0x140001054  8b 04 88                       mov eax, dword ptr [rax + 4*rcx]
+   30  0x140001057  48 63 54 24 10                 movsxd rdx, dword ptr [rsp + 0x10]
+   30  0x14000105C  48 8d 0d 0d 4c 07 00           lea rcx, [rip + 0x74c0d]    # 0x140075c70
+   30  0x140001063  3b 04 91                       cmp eax, dword ptr [rcx + 4*rdx]
+   30  0x140001066  0f 94 c0                       sete al
+   30  0x140001069  88 44 24 07                    mov byte ptr [rsp + 0x7], al
+   30  0x14000106D  8a 44 24 07                    mov al, byte ptr [rsp + 0x7]
+   30  0x140001071  a8 01                          test al, 0x1
+   30  0x140001073  75 02                          jne 0x140001077 <.text+0x77>
+   30  0x140001075  eb 0d                          jmp 0x140001084 <.text+0x84>
+   30  0x140001077  8b 44 24 08                    mov eax, dword ptr [rsp + 0x8]
+   30  0x14000107B  83 c0 01                       add eax, 0x1
+   30  0x14000107E  89 44 24 08                    mov dword ptr [rsp + 0x8], eax
+   30  0x140001082  eb aa                          jmp 0x14000102e <.text+0x2e>
+   31  0x140001084  48 63 4c 24 10                 movsxd rcx, dword ptr [rsp + 0x10]
+   31  0x140001089  48 8d 05 e0 4b 07 00           lea rax, [rip + 0x74be0]    # 0x140075c70
+   31  0x140001090  8b 14 88                       mov edx, dword ptr [rax + 4*rcx]
+   31  0x140001093  c1 e2 08                       shl edx, 0x8
+   31  0x140001096  0b 54 24 08                    or edx, dword ptr [rsp + 0x8]
+   31  0x14000109A  48 63 4c 24 0c                 movsxd rcx, dword ptr [rsp + 0xc]
+   31  0x14000109F  48 8d 05 2a 4c 07 00           lea rax, [rip + 0x74c2a]    # 0x140075cd0
+   31  0x1400010A6  89 14 88                       mov dword ptr [rax + 4*rcx], edx
+   32  0x1400010A9  8b 44 24 0c                    mov eax, dword ptr [rsp + 0xc]
+   32  0x1400010AD  83 c0 01                       add eax, 0x1
+   32  0x1400010B0  89 44 24 0c                    mov dword ptr [rsp + 0xc], eax
+   33  0x1400010B4  8b 44 24 08                    mov eax, dword ptr [rsp + 0x8]
+   33  0x1400010B8  03 44 24 10                    add eax, dword ptr [rsp + 0x10]
+   33  0x1400010BC  89 44 24 10                    mov dword ptr [rsp + 0x10], eax
+   28  0x1400010C0  e9 53 ff ff ff                 jmp 0x140001018 <.text+0x18>
+   35  0x1400010C5  8b 44 24 0c                    mov eax, dword ptr [rsp + 0xc]
+   35  0x1400010C9  48 83 c4 18                    add rsp, 0x18
+   35  0x1400010CD  c3                             ret
+
+<rle_decode>  @ 0x1400010D0
+   40  0x1400010D0  48 83 ec 18                    sub rsp, 0x18
+   40  0x1400010D4  89 4c 24 14                    mov dword ptr [rsp + 0x14], ecx
+   41  0x1400010D8  c7 44 24 10 00 00 00 00        mov dword ptr [rsp + 0x10], 0x0
+   42  0x1400010E0  c7 44 24 0c 00 00 00 00        mov dword ptr [rsp + 0xc], 0x0
+   42  0x1400010E8  8b 44 24 0c                    mov eax, dword ptr [rsp + 0xc]
+   42  0x1400010EC  3b 44 24 14                    cmp eax, dword ptr [rsp + 0x14]
+   42  0x1400010F0  7d 76                          jge 0x140001168 <.text+0x168>
+   43  0x1400010F2  48 63 4c 24 0c                 movsxd rcx, dword ptr [rsp + 0xc]
+   43  0x1400010F7  48 8d 05 d2 4b 07 00           lea rax, [rip + 0x74bd2]    # 0x140075cd0
+   43  0x1400010FE  8b 04 88                       mov eax, dword ptr [rax + 4*rcx]
+   43  0x140001101  c1 f8 08                       sar eax, 0x8
+   43  0x140001104  89 44 24 08                    mov dword ptr [rsp + 0x8], eax
+   44  0x140001108  48 63 4c 24 0c                 movsxd rcx, dword ptr [rsp + 0xc]
+   44  0x14000110D  48 8d 05 bc 4b 07 00           lea rax, [rip + 0x74bbc]    # 0x140075cd0
+   44  0x140001114  8b 04 88                       mov eax, dword ptr [rax + 4*rcx]
+   44  0x140001117  25 ff 00 00 00                 and eax, 0xff
+   44  0x14000111C  89 44 24 04                    mov dword ptr [rsp + 0x4], eax
+   45  0x140001120  c7 04 24 00 00 00 00           mov dword ptr [rsp], 0x0
+   45  0x140001127  8b 04 24                       mov eax, dword ptr [rsp]
+   45  0x14000112A  3b 44 24 04                    cmp eax, dword ptr [rsp + 0x4]
+   45  0x14000112E  7d 29                          jge 0x140001159 <.text+0x159>
+   46  0x140001130  8b 54 24 08                    mov edx, dword ptr [rsp + 0x8]
+   46  0x140001134  8b 44 24 10                    mov eax, dword ptr [rsp + 0x10]
+   46  0x140001138  89 c1                          mov ecx, eax
+   46  0x14000113A  83 c1 01                       add ecx, 0x1
+   46  0x14000113D  89 4c 24 10                    mov dword ptr [rsp + 0x10], ecx
+   46  0x140001141  48 63 c8                       movsxd rcx, eax
+   46  0x140001144  48 8d 05 e5 4b 07 00           lea rax, [rip + 0x74be5]    # 0x140075d30
+   46  0x14000114B  89 14 88                       mov dword ptr [rax + 4*rcx], edx
+   45  0x14000114E  8b 04 24                       mov eax, dword ptr [rsp]
+   45  0x140001151  83 c0 01                       add eax, 0x1
+   45  0x140001154  89 04 24                       mov dword ptr [rsp], eax
+   45  0x140001157  eb ce                          jmp 0x140001127 <.text+0x127>
+   48  0x140001159  eb 00                          jmp 0x14000115b <.text+0x15b>
+   42  0x14000115B  8b 44 24 0c                    mov eax, dword ptr [rsp + 0xc]
+   42  0x14000115F  83 c0 01                       add eax, 0x1
+   42  0x140001162  89 44 24 0c                    mov dword ptr [rsp + 0xc], eax
+   42  0x140001166  eb 80                          jmp 0x1400010e8 <.text+0xe8>
+   49  0x140001168  8b 44 24 10                    mov eax, dword ptr [rsp + 0x10]
+   49  0x14000116C  48 83 c4 18                    add rsp, 0x18
+   49  0x140001170  c3                             ret
+
+<main>  @ 0x140001180
+   53  0x140001180  48 83 ec 38                    sub rsp, 0x38
+   53  0x140001184  c7 44 24 34 00 00 00 00        mov dword ptr [rsp + 0x34], 0x0
+   55  0x14000118C  c7 44 24 30 c9 c4 12 00        mov dword ptr [rsp + 0x30], 0x12c4c9
+   56  0x140001194  c7 44 24 2c 00 00 00 00        mov dword ptr [rsp + 0x2c], 0x0
+   56  0x14000119C  83 7c 24 2c 18                 cmp dword ptr [rsp + 0x2c], 0x18
+   56  0x1400011A1  7d 3a                          jge 0x1400011dd <.text+0x1dd>
+   57  0x1400011A3  69 44 24 30 0d 66 19 00        imul eax, dword ptr [rsp + 0x30], 0x19660d
+   57  0x1400011AB  05 5f f3 6e 3c                 add eax, 0x3c6ef35f
+   57  0x1400011B0  89 44 24 30                    mov dword ptr [rsp + 0x30], eax
+   58  0x1400011B4  8b 54 24 30                    mov edx, dword ptr [rsp + 0x30]
+   58  0x1400011B8  c1 ea 10                       shr edx, 0x10
+   58  0x1400011BB  83 e2 01                       and edx, 0x1
+   58  0x1400011BE  83 c2 00                       add edx, 0x0
+   58  0x1400011C1  48 63 4c 24 2c                 movsxd rcx, dword ptr [rsp + 0x2c]
+   58  0x1400011C6  48 8d 05 a3 4a 07 00           lea rax, [rip + 0x74aa3]    # 0x140075c70
+   58  0x1400011CD  89 14 88                       mov dword ptr [rax + 4*rcx], edx
+   56  0x1400011D0  8b 44 24 2c                    mov eax, dword ptr [rsp + 0x2c]
+   56  0x1400011D4  83 c0 01                       add eax, 0x1
+   56  0x1400011D7  89 44 24 2c                    mov dword ptr [rsp + 0x2c], eax
+   56  0x1400011DB  eb bf                          jmp 0x14000119c <.text+0x19c>
+   60  0x1400011DD  b9 18 00 00 00                 mov ecx, 0x18
+   60  0x1400011E2  e8 19 fe ff ff                 call 0x140001000 <.text>
+   60  0x1400011E7  89 05 73 4a 07 00              mov dword ptr [rip + 0x74a73], eax # 0x140075c60
+   61  0x1400011ED  8b 0d 6d 4a 07 00              mov ecx, dword ptr [rip + 0x74a6d] # 0x140075c60
+   61  0x1400011F3  e8 d8 fe ff ff                 call 0x1400010d0 <.text+0xd0>
+   61  0x1400011F8  89 44 24 28                    mov dword ptr [rsp + 0x28], eax
+   62  0x1400011FC  6b 05 5d 4a 07 00 64           imul eax, dword ptr [rip + 0x74a5d], 0x64 # 0x140075c60
+   62  0x140001203  b9 18 00 00 00                 mov ecx, 0x18
+   62  0x140001208  99                             cdq
+   62  0x140001209  f7 f9                          idiv ecx
+   62  0x14000120B  89 05 53 4a 07 00              mov dword ptr [rip + 0x74a53], eax # 0x140075c64
+   63  0x140001211  83 7c 24 28 18                 cmp dword ptr [rsp + 0x28], 0x18
+   63  0x140001216  0f 94 c0                       sete al
+   63  0x140001219  24 01                          and al, 0x1
+   63  0x14000121B  0f b6 c0                       movzx eax, al
+   63  0x14000121E  89 05 44 4a 07 00              mov dword ptr [rip + 0x74a44], eax # 0x140075c68
+   64  0x140001224  c7 44 24 24 00 00 00 00        mov dword ptr [rsp + 0x24], 0x0
+   64  0x14000122C  83 7c 24 24 18                 cmp dword ptr [rsp + 0x24], 0x18
+   64  0x140001231  7d 39                          jge 0x14000126c <.text+0x26c>
+   65  0x140001233  48 63 4c 24 24                 movsxd rcx, dword ptr [rsp + 0x24]
+   65  0x140001238  48 8d 05 f1 4a 07 00           lea rax, [rip + 0x74af1]    # 0x140075d30
+   65  0x14000123F  8b 04 88                       mov eax, dword ptr [rax + 4*rcx]
+   65  0x140001242  48 63 54 24 24                 movsxd rdx, dword ptr [rsp + 0x24]
+   65  0x140001247  48 8d 0d 22 4a 07 00           lea rcx, [rip + 0x74a22]    # 0x140075c70
+   65  0x14000124E  3b 04 91                       cmp eax, dword ptr [rcx + 4*rdx]
+   65  0x140001251  74 0a                          je 0x14000125d <.text+0x25d>
+   66  0x140001253  c7 05 0b 4a 07 00 00 00 00 00  mov dword ptr [rip + 0x74a0b], 0x0 # 0x140075c68
+   68  0x14000125D  eb 00                          jmp 0x14000125f <.text+0x25f>
+   64  0x14000125F  8b 44 24 24                    mov eax, dword ptr [rsp + 0x24]
+   64  0x140001263  83 c0 01                       add eax, 0x1
+   64  0x140001266  89 44 24 24                    mov dword ptr [rsp + 0x24], eax
+   64  0x14000126A  eb c0                          jmp 0x14000122c <.text+0x22c>
+   69  0x14000126C  31 c0                          xor eax, eax
+   69  0x14000126E  48 83 c4 38                    add rsp, 0x38
+   69  0x140001272  c3                             ret
+

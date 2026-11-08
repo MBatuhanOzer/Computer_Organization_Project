@@ -1,0 +1,453 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{fontspec}
+\usepackage[a4paper,top=2.5cm,bottom=2.5cm,left=2.5cm,right=2.5cm]{geometry}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+\setmainfont{Times New Roman}
+\setmonofont{Consolas}[Scale=0.80]
+
+\definecolor{hdr}{gray}{0.94}
+\definecolor{codebg}{gray}{0.94}
+
+\newcommand{\tl}{\texttt}
+\newcommand{\hd}[1]{\cellcolor{hdr}#1}
+\renewcommand{\arraystretch}{1.35}
+\setlength{\arrayrulewidth}{0.6pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\setlength{\tabcolsep}{5pt}
+\raggedbottom
+\pagestyle{empty}
+
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  backgroundcolor=\color{codebg},
+  numbers=left, numberstyle=\tiny, numbersep=7pt, stepnumber=1,
+  breaklines=true, breakindent=0pt, breakautoindent=false,
+  postbreak=\mbox{$\hookrightarrow$\space},
+  frame=none, framesep=3pt, xleftmargin=16pt, framexleftmargin=16pt,
+  columns=fullflexible, keepspaces=true, showstringspaces=false, tabsize=4
+}
+
+\begin{document}
+
+\begin{center}
+\textbf{CMPE3209 Computer Organization --- Proje Teslim Tutanağı}
+\end{center}
+
+\textbf{Kullanım talimatı}
+
+Bu tutanak projenin tek resmi teslim belgesidir. Her kilometre taşında (M1, M2 ve final; tümü
+pazartesi) ilgili adım doldurulur ve aynı dosya güncellenerek yeniden teslim edilir. Ayrıntılı
+görev tanımları proje yönergesindedir; bu tutanak yalnızca ne istendiğini ve nereye yazılacağını
+gösterir.
+
+\begin{itemize}[leftmargin=2em,itemsep=1pt,topsep=2pt]
+\item Tüm sayılar birimiyle yazılır (byte, cycle, ns, GHz). Hex değerler \tl{0x} önekiyle yazılır.
+\item \textbf{Varsayım} olan her değer ``(varsayım)'' etiketiyle işaretlenir.
+\item Tablolara sığmayan çıktılar (assembly listesi, objdump, CSV izi, ekran görüntüleri) Git
+deposuna konur. Tutanakta dosya adıyla atıf yapılır.
+\item Boş bırakılan zorunlu alan, o adımın puanını sıfırlar.
+\end{itemize}
+
+\textbf{Öğrenci bilgileri}
+
+\begin{longtable}{|p{10.2cm}|p{5.3cm}|}
+\hline
+\hd{Alan} & \hd{Değer}\\
+\hline
+Ad Soyad & Mehmet Batuhan Özer\\
+\hline
+Öğrenci numarası (SID) & 5001230025\\
+\hline
+E-posta & \tl{batuhanozer1042@gmail.com}\\
+\hline
+Seçilen görev (G1--G5) & G5 --- Run-length sıkıştırma\\
+\hline
+Seçilen ISA ve sürümü (ör.\ RV32IM) & x86-64 (Microsoft x64 ABI, PE/COFF)\\
+\hline
+Derleyici ve sürümü & clang-cl, LLVM 21.1.8 (MSVC 14.44.35207)\\
+\hline
+Simülatör / araçlar & Visual Studio 2022 (debugger), \tl{llvm-objdump} 21.1.8; CMake 3.31.6 + Ninja 1.12.1\\
+\hline
+Git deposu adresi & \url{https://github.com/MBatuhanOzer/Computer_Organization_Project}\\
+\hline
+\end{longtable}
+
+\textbf{Adım 0 --- Kişiye özel parametreler}
+
+Bu adım M1 ile birlikte teslim edilir. Hatalı bir parametre, ona dayanan tüm adımları geçersiz
+kılar; öğretim üyesi bu tabloyu M1'de kontrol eder.
+
+\begin{longtable}{|p{2.0cm}|p{4.5cm}|p{4.9cm}|p{3.1cm}|}
+\hline
+\hd{Sembol} & \hd{Tanım} & \hd{Hesap (adımlarıyla)} & \hd{Sonuç}\\
+\hline
+\endhead
+d & SID'in son hanesi & 500123002\textbf{5} & \textbf{5}\\
+\hline
+D2 & SID'in son iki hanesi & 50012300\textbf{25} & \textbf{25}\\
+\hline
+S & SID'in hanelerinin toplamı & 5+0+0+1+2+3+0+0+2+5 & \textbf{18}\\
+\hline
+N & 24 + (D2 mod 25) & 24 + (25 mod 25) = 24 + 0 & \textbf{24 eleman}\\
+\hline
+Cache & d'ye göre: boyut / line / mapping / line sayısı / set sayısı & d = 5 satırı & \textbf{256 byte / 16 byte / 4-way set-assoc.\ / 16 line / 4 set}\\
+\hline
+Write policy & d çift $\rightarrow$ write-back, d tek $\rightarrow$ write-through & d = 5 (tek) & \textbf{write-through}\\
+\hline
+k & (S mod 7) + 3 & (18 mod 7) + 3 = 4 + 3 & \textbf{7}\\
+\hline
+Interrupt türü & S çift $\rightarrow$ Timer, S tek $\rightarrow$ I/O & S = 18 (çift) & \textbf{Timer}\\
+\hline
+f & 1.0 + 0.1 × d GHz (varsayım) & 1.0 + 0.1 × 5 & \textbf{1,5 GHz} (varsayım)\\
+\hline
+T1 / T2 & T1 = 1 cycle; T2 = 20 + 5 × (d mod 4) cycle (varsayım) & T2 = 20 + 5 × 1 & \textbf{1 cycle / 25 cycle} (varsayım)\\
+\hline
+Nc & 2 + (S mod 7) (varsayım) & 2 + 4 & \textbf{6 çekirdek} (varsayım)\\
+\hline
+Görev parametresi & Seçilen göreve göre (T, P, K, yön veya R) & G5: R = 2 + (SID mod 3); 5001230025 mod 3 = 0 & \textbf{R = 2}, B = 0\\
+\hline
+\end{longtable}
+
+Türetilmiş: $\tau = 1/f = 1/(1{,}5\ \text{GHz}) = \mathbf{0{,}667}$ ns (varsayım).
+Tutarlılık: 256 byte / 16 byte = 16 line; 16 line / 4 yol = 4 set.
+
+\textbf{Adres alanları} (ISA'nın adres genişliği s + w bit; 64-bit ISA'da düşük 32 bit kullanılır):
+
+\begin{longtable}{|p{6.0cm}|p{2.8cm}|p{6.2cm}|}
+\hline
+\hd{Alan} & \hd{Bit sayısı} & \hd{Hesap}\\
+\hline
+Word (w) & \textbf{4 bit} & line boyu 16 byte $= 2^4$; adres[3:0]\\
+\hline
+Line (r) veya set (d) & \textbf{2 bit} & set sayısı $4 = 2^2$; adres[5:4]\\
+\hline
+Tag ($s - r$ veya $s - d$) & \textbf{26 bit} & $s + w = 32 \Rightarrow s = 28$; $28 - 2$; adres[31:6]\\
+\hline
+Toplam & \textbf{32 bit} & $26 + 2 + 4$\\
+\hline
+\end{longtable}
+
+\textbf{Adım 1 --- Görev seçimi ve C programı (M1: 2 Kasım, Pazartesi)}
+
+\textbf{1.1 Görev seçimi} (yalnızca birini işaretleyin):
+
+\begin{itemize}[leftmargin=2em,itemsep=1pt,topsep=2pt]
+\item $\square$ G1 Biyomedikal sinyal alarmı
+\item $\square$ G2 Sınav notu dağılımı
+\item $\square$ G3 Mesaj şifreleme ve bütünlük
+\item $\square$ G4 Sıralama ve medyan
+\item $\boxtimes$ \textbf{G5 Run-length sıkıştırma}
+\end{itemize}
+
+\textbf{1.2 Çözüm tasarımı} (3--5 cümle: hangi algoritma, hangi fonksiyonlar, hangi veri yerleşimi
+ve neden):
+
+Program üç global dizi üzerinde çalışır: \tl{v[24]} LCG ile üretilen $\{0,1\}$ sembollerini,
+\tl{enc[24]} kodlanmış (değer, tekrar) çiftlerini, \tl{dec[24]} ise geri açılmış diziyi tutar.
+\tl{rle\_encode(n)} \tl{v} dizisini tek geçişte tarar; dış döngü her koşu için bir kez döner, iç
+döngü aynı sembolün tekrar sayısını sayar ve her koşu \tl{(v[i] << 8) | run} biçiminde tek bir
+32-bit word'e paketlenerek \tl{enc} dizisine yazılır, böylece shift, OR ve dizi store'u aynı
+satırda görünür hale gelir. \tl{rle\_decode(len)} bu paketleri \tl{>> 8} ve \tl{\& 0xFF} ile
+ayrıştırıp \tl{dec} dizisine açar; her iki fonksiyon da parametre alıp değer döndürür. Doğrulama
+iki aşamalıdır: önce eleman sayısı (\tl{out == N}), sonra üçüncü geçişte eleman değerleri
+karşılaştırılır. Veri yerleşimi bilinçli olarak üç ayrı global dizi şeklinde seçilmiştir: üç dizi
+15 cache line'a karşılık gelir, 256 byte'lık cache ise 16 line tutar; bu, 4-way set'lerden tam
+birinin taşmasını sağlayarak Aşama 4'te hem spatial locality'nin hem de conflict miss'in aynı iz
+üzerinde gözlenmesine imkân verir.
+
+\textbf{1.3 C kaynak kodu.} Satır numaralı kod aşağıdaki bloğa yapıştırılır (25--60 satır):
+
+\lstinputlisting[language=C]{main.c}
+
+Tek dosya, C99, 54 satır kod (toplam 70 satır; 9 boş ve 6 yalnızca yorum içeren satır hariç).
+\tl{clang -std=c99 -pedantic-errors -Wall -Wextra} ile uyarısız derlenir. Uzun yorum satırları
+listede $\hookrightarrow$ ile sarılmıştır.
+
+\textbf{1.4 Zorunlu yapı eşlemesi.} Her madde için satır numarası ve tek cümlelik açıklama:
+
+\begin{longtable}{|p{0.9cm}|p{4.3cm}|p{2.2cm}|p{7.3cm}|}
+\hline
+\hd{\#} & \hd{Zorunlu yapı} & \hd{Satır no} & \hd{Açıklama}\\
+\hline
+\endhead
+Y1 & N elemanlı global int dizisi, en az iki geçiş & \textbf{15}; 56, 28, 64 & \tl{s32 v[N];} --- \tl{v} üzerinde üç geçiş: s.~56 yazma, s.~28 okuma/kodlama, s.~64 doğrulama\\
+\hline
+Y2 & Koşullu dallanma & \textbf{30}; 65 & s.~30 \tl{v[i+run] == v[i]} koşu uzunluğunu belirler; s.~65 \tl{if (dec[i] != v[i])}\\
+\hline
+Y3 & Parametreli, değer döndüren fonksiyon çağrısı & \textbf{24}, 39 (tanım); \textbf{60}, 61 (çağrı) & \tl{s32 rle\_encode(s32 n)} ve \tl{s32 rle\_decode(s32 len)}; ikisi de parametre alır, değer döndürür ve dönen değer çağrı yerinde bir değişkene atanır\\
+\hline
+Y4 & Toplama/çıkarma, çarpma veya shift, bit işlemi & \textbf{31}, 33, 43, 44, 62 & s.~31 \tl{<< 8} ve \tl{|}; s.~33 \tl{i += run}; s.~43 \tl{>> 8}; s.~44 \tl{\& 0xFF}; s.~62 \tl{100 * enc\_len}\\
+\hline
+Y5 & Dizi elemanına store & \textbf{58}, 31, 46 & \tl{v[i] = ...} (s.~58), \tl{enc[k] = ...} (s.~31), \tl{dec[o++] = ...} (s.~46)\\
+\hline
+Y6 & \tl{const int SID} ve hesapta kullanımı & \textbf{13} (tanım), \textbf{55} (kullanım) & \tl{const int SID = 1230025;} (numara $2^{31}-1$'i aştığı için son 9 hane); LCG'nin $x_0$ tohumudur, dolayısıyla tüm \tl{v} dizisini ve üç Y7 çıktısını belirler\\
+\hline
+Y7 & Sonucun tutulduğu global değişken(ler) & \textbf{19, 20, 21} & \tl{enc\_len}, \tl{ratio\_x100}, \tl{decode\_ok}\\
+\hline
+\end{longtable}
+
+\textbf{1.5 Program çıktıları.} Simülatörde çalıştırıldıktan sonra bellekten okunan değerler:
+
+\begin{longtable}{|p{3.0cm}|p{2.8cm}|p{5.6cm}|p{3.3cm}|}
+\hline
+\hd{Global değişken} & \hd{Adres (hex)} & \hd{Değer} & \hd{Ekran görüntüsü dosyası}\\
+\hline
+\endhead
+\tl{enc\_len} & \tl{0x140075C60} & \textbf{11} \quad(\tl{0x0000000B}) & \tl{ss\_globals.png}\\
+\hline
+\tl{ratio\_x100} & \tl{0x140075C64} & \textbf{45} \quad(\tl{0x0000002D}) & \tl{ss\_globals.png}\\
+\hline
+\tl{decode\_ok} & \tl{0x140075C68} & \textbf{1} \quad(\tl{0x00000001}) & \tl{ss\_globals.png}\\
+\hline
+\tl{v[24]} & \tl{0x140075C70} & \tl{0001 0001 0000 0111 0010 1110} & \tl{ss\_globals.png}\\
+\hline
+\tl{enc[0..10]} & \tl{0x140075CD0} & \tl{0x0003 0x0101 0x0003 0x0101 0x0005 0x0103 0x0002 0x0101 0x0001 0x0103 0x0001} & \tl{ss\_globals.png}\\
+\hline
+\tl{dec[24]} & \tl{0x140075D30} & \tl{v} ile birebir aynı & \tl{ss\_globals.png}\\
+\hline
+\end{longtable}
+
+Değerler Visual Studio 2022 Watch penceresinden okunmuştur; pencere onlu taban kullanır
+(\tl{257} $=$ \tl{0x0101}, \tl{259} $=$ \tl{0x0103}) ve \tl{enc}'in tanımlı 24 elemanının
+tamamını gösterir, yalnızca ilk \tl{enc\_len} $= 11$ tanesi anlamlıdır.
+\tl{ratio\_x100} $= \lfloor 100 \times 11 / 24 \rfloor = 45$; yönergedeki $R = 2$ için
+``yaklaşık 50'' beklentisine göre fark, $N = 24$'ün küçüklüğünden kaynaklanan örneklem
+dalgalanmasıdır (beklenen koşu sayısı 12, ölçülen 11).
+
+\textbf{1.6 İzlenecek kernel} (12--20 dinamik instruction; en az bir load, store, ALU, koşullu
+branch ve call/return içermeli):
+
+\begin{longtable}{|p{6.0cm}|p{9.5cm}|}
+\hline
+\hd{Alan} & \hd{Değer}\\
+\hline
+C satır aralığı & s.~49 (\tl{return o;}) ve s.~61--64\\
+\hline
+Başlangıç ve bitiş adresi (hex) & \tl{0x140001168} -- \tl{0x140001232} (toplam 68 byte)\\
+\hline
+Dinamik instruction sayısı & \textbf{17}\\
+\hline
+Hangi döngü iterasyonu (ör.\ i = 3) & \tl{rle\_decode}'dan tek dönüş; ardından doğrulama döngüsünün ilk testi ($i = 0$)\\
+\hline
+\end{longtable}
+
+İçerik kontrolü: load (\#1, 5, 10, 16), store (\#4, 9, 14), ALU (\#5 \tl{imul}, \#8 \tl{idiv},
+\#12 \tl{and}), koşullu branch (\#17 \tl{jge}), fonksiyon dönüşü (\#3 \tl{ret}).
+$k = 7$ interrupt'ı 7.~instruction olan \tl{cdq}'ya (\tl{0x140001208}) denk gelir; kaydedilecek
+PC $=$ \tl{0x140001209}. Kernel'in tam instruction listesi ek belgededir
+(\tl{M1\_Adim0\_Adim1.pdf}, Bölüm 2.6).
+
+\textbf{Öğretim üyesi (M1):} $\square$ Onaylandı \quad $\square$ Düzeltme istendi \quad
+$\square$ Reddedildi --- Tarih: \rule{2.2cm}{0.4pt} \quad Not: \rule{2.2cm}{0.4pt}
+
+\textbf{Adım 2 --- Assembly ve machine code (M2: 9 Kasım, Pazartesi)}
+
+\textbf{2a. C $\rightarrow$ assembly eşlemesi} (-O0; listenin tamamı depoda asm\_O0.s):
+
+Derleme: \tl{cmake -{}-preset od} (\tl{/Zi /Od /Ob0}). Her derleme \tl{listings/} altına
+derleyicinin C satır işaretli assembly'sini (\tl{asm\_O0.s}) ve linklenmiş exe'deki kendi
+fonksiyonlarımızın disassembly'sini (\tl{objdump\_O0.txt}) yazar. İkisi instruction instruction
+eşlenerek her C satırının gerçek adres aralığı bulunmuştur; 146 instruction'ın tamamı
+\tl{listings/c2asm\_O0.txt} dosyasındadır.
+
+{\small
+\begin{longtable}{|p{1.0cm}|p{3.4cm}|p{6.6cm}|p{3.4cm}|}
+\hline
+\hd{C satır no} & \hd{C ifadesi} & \hd{Assembly satırları} & \hd{Adres aralığı (hex)}\\
+\hline
+\endhead
+55 & \tl{u32 x = (u32)SID;} & \tl{mov dword ptr [rsp+0x30], 0x12c4c9} & \tl{0x14000118C}--\tl{0x140001193}\\
+\hline
+57 & \tl{x = 1664525u * x + 1013904223u;} & \tl{imul eax, dword ptr [rsp+0x30], 0x19660d}; \tl{add eax, 0x3c6ef35f}; \tl{mov dword ptr [rsp+0x30], eax} & \tl{0x1400011A3}--\tl{0x1400011B3}\\
+\hline
+28 & \tl{while (i < n) \{} & test: \tl{mov eax, [rsp+0x10]}; \tl{cmp eax, [rsp+0x14]}; \tl{jge 0x1400010C5} \newline geri dönüş: \tl{jmp 0x140001018} & \tl{0x140001018}--\tl{0x140001025} \newline ve \tl{0x1400010C0}--\tl{0x1400010C4}\\
+\hline
+31 & \tl{enc[k] = (v[i] << 8) | run;} & \tl{movsxd rcx, [rsp+0x10]}; \tl{lea rax, [rip+..]} (\tl{v}); \tl{mov edx, [rax+4*rcx]}; \tl{shl edx, 0x8}; \tl{or edx, [rsp+0x8]}; \tl{movsxd rcx, [rsp+0xc]}; \tl{lea rax, [rip+..]} (\tl{enc}); \tl{mov [rax+4*rcx], edx} & \tl{0x140001084}--\tl{0x1400010A8}\\
+\hline
+60 & \tl{enc\_len = rle\_encode(N);} & \tl{mov ecx, 0x18}; \tl{call 0x140001000}; \tl{mov [rip+..], eax} (\tl{enc\_len}) & \tl{0x1400011DD}--\tl{0x1400011EC}\\
+\hline
+62 & \tl{ratio\_x100 = (100 * enc\_len) / N;} & \tl{imul eax, [rip+..], 0x64}; \tl{mov ecx, 0x18}; \tl{cdq}; \tl{idiv ecx}; \tl{mov [rip+..], eax} & \tl{0x1400011FC}--\tl{0x140001210}\\
+\hline
+\end{longtable}
+}
+
+Satır 28 iki ayrı adres aralığına düşer: döngü testi döngünün başında, geri dönüş \tl{jmp}'i
+sonundadır; tek bir C satırı bitişik olmayan makine koduna karşılık gelebilir. Satır 30'daki
+\tl{\&\&} koşulu -O0'da 23 instruction'a açılır: önce sınır testi (\tl{jge}), ardından
+\tl{cmp} + \tl{sete} ile sonuç bir byte'lık stack değişkenine yazılıp tekrar okunur.
+
+{\small
+\begin{longtable}{|p{1.8cm}|p{3.0cm}|p{2.6cm}|p{7.0cm}|}
+\hline
+\hd{Bölüm} & \hd{Başlangıç adresi (hex)} & \hd{Boyut (byte)} & \hd{İçerik}\\
+\hline
+\tl{.text} & \tl{0x140001000} & 395\,750 (\tl{0x609E6}) & Kendi kodumuz \tl{0x140001000}--\tl{0x140001272} (627 byte: \tl{rle\_encode}, \tl{rle\_decode}, \tl{main}); geri kalanı statik CRT\\
+\hline
+\tl{.rdata} & \tl{0x140062000} & 75\,452 (\tl{0x126BC}) & \tl{SID} (\tl{0x140062000}) ve CRT'nin salt-okunur verisi\\
+\hline
+\tl{.data / .bss} & \tl{0x140075000} & 3\,584 (\tl{0xE00}) & \tl{enc\_len} \tl{0x140075C60}, \tl{ratio\_x100}, \tl{decode\_ok}, \tl{v} \tl{0x140075C70}, \tl{enc} \tl{0x140075CD0}, \tl{dec} \tl{0x140075D30}. Sıfırla ilklenen globaller; PE'de ayrı \tl{.bss} bölümü yoktur, linker bunları \tl{.data}'ya katar.\\
+\hline
+\end{longtable}
+}
+
+\textbf{Von Neumann ilkesi bu adreslerde nasıl görünüyor?} Komutlar (\tl{.text},
+\tl{0x140001000}) ve veriler (\tl{.rdata} \tl{0x140062000}, \tl{.data} \tl{0x140075000}) aynı tek
+ve doğrusal adres uzayındadır. Bu RIP-relative adreslemede doğrudan görülür: \tl{0x1400011C6}'daki
+\tl{lea rax, [rip+0x74AA3]}, \tl{v}'nin adresini bir sonraki komutun adresine sabit bir uzaklık
+ekleyerek bulur (\tl{0x1400011CD} + \tl{0x74AA3} $=$ \tl{0x140075C70}); bu hesap ancak komut ve
+veri aynı adres uzayında durduğunda anlamlıdır.
+
+Program \tl{SID}'i \tl{.rdata}'dan okumaz: \tl{const int} olduğu için derleyici değeri satır
+55'teki komutun içine immediate olarak gömer (\tl{c9 c4 12 00}). \tl{.rdata}'daki kopya yalnızca
+\tl{SID}'in dış bağlantılı (external linkage) bir sembol olması nedeniyle üretilir.
+
+\textbf{2b. -O0 ve -O1 karşılaştırması (kernel için):}
+
+Kernel C satırlarıyla tanımlıdır (s.~49 \tl{return o;} ve s.~61--64); \tl{/O1} sütunu aynı C
+satırlarına ait instruction'ları sayar (\tl{listings/c2asm\_O1.txt}). Load ve store sayıları
+bütün bellek okuma/yazmalarını içerir; \tl{ret} ve \tl{pop} stack'ten okudukları için load sayılır.
+
+{\small
+\begin{longtable}{|p{3.4cm}|p{1.0cm}|p{1.0cm}|p{9.0cm}|}
+\hline
+\hd{Ölçü} & \hd{-O0} & \hd{-O1} & \hd{Farkın nedeni}\\
+\hline
+\endhead
+Kernel'deki instruction sayısı & 17 & 18 & Register allocation spill/reload'ları kaldırdı (\tl{out} ve \tl{i} artık register'da; s.~61: 1$\to$0) ve döngü döndürüldüğü için ilk test silindi (\tl{N} $=$ 24 $>$ 0 derleme anında bilinir; s.~64: 3$\to$0). Buna karşılık \tl{/ 24} bölmesi \tl{cdq}+\tl{idiv} yerine sabitle çarpma dizisine dönüştü (\tl{imul} ile \tl{0x2AAAAAAB}, \tl{sar 34}; s.~62: 5$\to$8) ve \tl{rle\_decode} dönüşte üç callee-saved register'ı geri yükledi (s.~49: 3$\to$4). Net etki: daha az bellek erişimi, biraz daha fazla ama daha ucuz instruction.\\
+\hline
+Load sayısı & 5 & 5 & -O0: 3 spill okuma (\tl{o}, \tl{out}, \tl{i}) $+$ \tl{enc\_len} $+$ \tl{ret}. -O1: spill okuma 0; yerine 3 \tl{pop} (callee-saved \tl{rbx}, \tl{rdi}, \tl{rsi}) $+$ \tl{enc\_len} $+$ \tl{ret}. Sayı aynı, içerik farklı: değişken trafiği tamamen kalktı.\\
+\hline
+Store sayısı & 4 & 2 & -O0'da \tl{out} ve \tl{i} stack'e yazılır (2 spill store); -O1'de register'da kalırlar. Kalan 2 store \tl{ratio\_x100} ve \tl{decode\_ok}'tur ve kaldırılamaz: sonuç global değişkende tutulmalıdır (Y7).\\
+\hline
+Kullanılan register sayısı & 4 & 7 & -O0 her değişkeni stack'te tuttuğu için yalnızca \tl{rax}, \tl{rcx}, \tl{rdx}, \tl{rsp} kullanır. -O1 değişkenleri register'larda yaşatır: \tl{rax}, \tl{rcx}, \tl{rdx}, \tl{rsp} $+$ \tl{rbx}, \tl{rdi}, \tl{rsi}. Bu üçü callee-saved olduğu için kullanılmaları onları kaydetme/geri yükleme maliyetini (\tl{push}/\tl{pop}) beraberinde getirir.\\
+\hline
+\end{longtable}
+}
+
+Bellek referansı toplamı (load $+$ store): -O0'da 9, -O1'de 7. Stack üzerindeki değişken
+trafiği 5'ten 0'a iner; azalmanın tamamı register allocation'dan gelir.
+
+\textbf{2c. Elle machine code} (en az 10 instruction; x86-64 için 8). Kullanılan tüm formatlar
+kapsanmalı.
+
+Değişken uzunluklu x86-64'te ``format'', bir instruction'ın hangi alanları taşıdığıdır (prefix,
+REX, opcode, ModR/M, SIB, displacement, immediate). Format sütunu Intel SDM Cilt 2'nin
+``Op/En'' sınıflandırmasını kullanır. Seçilen 10 instruction programda kullanılan her alan türünü
+en az bir kez içerir: REX.W (\#2), tek byte'lık opcode (çoğu), iki byte'lık \tl{0F} opcode (\#9),
+ModR/M.reg içinde opcode uzantısı (\#2, \#4), opcode içinde register (\#8), ModR/M mod $=$ 00
+RIP-relative (\#7), mod $=$ 01 (\#1, \#4, \#6), mod $=$ 11 (\#2, \#9), SIB (\#1, \#4, \#6), disp8
+(\#1, \#4, \#6), disp32 (\#7), imm8 (\#2, \#7), imm32 (\#4, \#8), rel8 (\#10), rel32 (\#5) ve
+operandsız (\#3). Instruction'ların 8'i kernel'den alınmıştır (\#4 ve \#5 hariç); doğrulama
+\tl{listings/objdump\_O0.txt} ile yapılır.
+
+{\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{longtable}{|p{0.35cm}|p{1.85cm}|p{3.3cm}|p{1.9cm}|p{2.5cm}|p{1.7cm}|p{1.5cm}|p{1.0cm}|}
+\hline
+\hd{\#} & \hd{Adres (hex)} & \hd{Assembly} & \hd{Format} & \hd{Alanlar (ad = binary)} & \hd{Machine code (hex)} & \hd{Bellekteki byte sırası} & \hd{objdump ile aynı mı?}\\
+\hline
+\endhead
+1 & \tl{0x140001168} & \tl{mov eax, dword ptr [rsp+0x10]} & RM: \tl{8B /r} & \tl{op=10001011} \newline \tl{mod=01 reg=000 rm=100} \newline \tl{ss=00 idx=100 base=100} \newline \tl{disp8=00010000} & \tl{8B 44 24 10} & \tl{8B, 44, 24, 10} & \checkmark \\
+\hline
+2 & \tl{0x14000116C} & \tl{add rsp, 0x18} & MI: \tl{REX.W 83 /0 ib} & \tl{REX=0100 W=1 R=0 X=0 B=0} \newline \tl{op=10000011} \newline \tl{mod=11 reg=000(/0) rm=100} \newline \tl{imm8=00011000} & \tl{48 83 C4 18} & \tl{48, 83, C4, 18} & \checkmark \\
+\hline
+3 & \tl{0x140001170} & \tl{ret} & ZO: \tl{C3} & \tl{op=11000011} & \tl{C3} & \tl{C3} & \checkmark \\
+\hline
+4 & \tl{0x14000118C} & \tl{mov dword ptr [rsp+0x30], 0x12c4c9} & MI: \tl{C7 /0 id} & \tl{op=11000111} \newline \tl{mod=01 reg=000(/0) rm=100} \newline \tl{ss=00 idx=100 base=100} \newline \tl{disp8=00110000} \newline \tl{imm32=0x0012C4C9} & \tl{C7 44 24 30 C9 C4 12 00} & \tl{C7, 44, 24, 30, C9, C4, 12, 00 (imm32 LE)} & \checkmark \\
+\hline
+5 & \tl{0x1400011F3} & \tl{call 0x1400010D0} (\tl{rle\_decode}) & D: \tl{E8 cd} & \tl{op=11101000} \newline \tl{rel32=0xFFFFFED8 (-296)} & \tl{E8 D8 FE FF FF} & \tl{E8, D8, FE, FF, FF (rel32 LE)} & \checkmark \\
+\hline
+6 & \tl{0x1400011F8} & \tl{mov dword ptr [rsp+0x28], eax} & MR: \tl{89 /r} & \tl{op=10001001} \newline \tl{mod=01 reg=000 rm=100} \newline \tl{ss=00 idx=100 base=100} \newline \tl{disp8=00101000} & \tl{89 44 24 28} & \tl{89, 44, 24, 28} & \checkmark \\
+\hline
+7 & \tl{0x1400011FC} & \tl{imul eax, dword ptr [rip+0x74a5d], 0x64} & RMI: \tl{6B /r ib} & \tl{op=01101011} \newline \tl{mod=00 reg=000 rm=101(RIP)} \newline \tl{disp32=0x00074A5D} \newline \tl{imm8=01100100} & \tl{6B 05 5D 4A 07 00 64} & \tl{6B, 05, 5D, 4A, 07, 00, 64 (disp32 LE)} & \checkmark \\
+\hline
+8 & \tl{0x140001203} & \tl{mov ecx, 0x18} & OI: \tl{B8+rd id} & \tl{op=10111 reg=001(ecx)} \newline \tl{imm32=0x00000018} & \tl{B9 18 00 00 00} & \tl{B9, 18, 00, 00, 00 (imm32 LE)} & \checkmark \\
+\hline
+9 & \tl{0x140001216} & \tl{sete al} & M: \tl{0F 94} & \tl{esc=00001111} \newline \tl{op=10010100} \newline \tl{mod=11 reg=000 rm=000(al)} & \tl{0F 94 C0} & \tl{0F, 94, C0} & \checkmark \\
+\hline
+10 & \tl{0x140001231} & \tl{jge 0x14000126C} & D: \tl{7D cb} & \tl{op=01111101} \newline \tl{rel8=00111001 (+57)} & \tl{7D 39} & \tl{7D, 39} & \checkmark \\
+\hline
+\end{longtable}
+}
+
+\textbf{Doğrulama.} Tablodaki 10 instruction'ın makine kodu, linklenmiş \tl{build-od/rle.exe}
+üzerinde Visual Studio 2022 Disassembly penceresinde (\emph{Show Code Bytes} açık) birebir
+doğrulanmıştır; ekran görüntüsü depoda \tl{ss\_m2\_disasm.png} dosyasındadır. Pencere C
+satırlarını da gösterdiği için 2a'daki eşlemeyi de doğrular; stack değişkenleri PDB'den gelen
+adlarıyla görünür (ör.\ \tl{[x]} $=$ \tl{[rsp+0x30]}, \tl{[out]} $=$ \tl{[rsp+0x28]}).
+
+Zorunlu instruction'ların tablodaki sıra numarası:
+
+\begin{itemize}[leftmargin=2em,itemsep=1pt,topsep=2pt]
+\item $\boxtimes$ SID'i yükleyen instruction(lar): \# 4
+\item $\boxtimes$ Koşullu branch: \# 10
+\item $\boxtimes$ Load: \# 1
+\item $\boxtimes$ Store: \# 6
+\item $\boxtimes$ Fonksiyon çağrısı: \# 5
+\end{itemize}
+
+\textbf{SID'in yüklenmesi.} Sabitin neden tek instruction'a sığmadığı, nasıl bölündüğü ve
+gerekiyorsa +1 düzeltmenin sign extension ile açıklaması:
+
+x86-64'te sabit tek instruction'a \textbf{sığar}, bölünmez ve düzeltme gerekmez. \#4
+(\tl{C7 /0 id}) 32 bitlik bir immediate alanı taşır; \tl{SID} $=$ 1\,230\,025 $=$
+\tl{0x0012C4C9}, instruction'ın son dört byte'ına little-endian olarak yazılır:
+\tl{C9 C4 12 00}. Bu, değişken uzunluklu encoding sayesinde mümkündür: instruction sabiti
+taşımak için 8 byte'a uzar. (\tl{/O1}'de aynı sabit doğrudan register'a yüklenir:
+\tl{mov eax, 0x12C4C9} $=$ \tl{B8 C9 C4 12 00}, yine tek instruction.)
+
+Sabit 32 bit uzunluklu RV32I'de ise 32 bitlik bir sabit, 32 bitlik instruction'ın içine opcode ve
+register alanlarıyla birlikte sığmaz. Sabit ikiye bölünür: \tl{lui} üst 20 biti, \tl{addi} alt
+12 biti yükler. \tl{addi}'nin 12 bitlik immediate'i sign-extend edildiği için, alt 12 bitin en
+üst biti (bit 11) 1 olsaydı bu değer negatif yorumlanır ve sonuçtan $2^{12}$ düşerdi; bunu
+dengelemek için \tl{lui} değerine $+1$ eklenirdi. \tl{SID} için alt 12 bit
+\tl{0x4C9} $=$ \tl{0100 1100 1001}, bit 11 $= 0$ olduğundan düzeltme gerekmez:
+\tl{lui 0x12C} ($\to$ \tl{0x0012C000}) $+$ \tl{addi 0x4C9} $=$ \tl{0x0012C4C9}.
+
+\textbf{Branch offset hesabı.} Branch'in adresi, hedef adres ve offset'in adım adım hesabı:
+
+\#10 \tl{jge}, PC-relative'dir ve offset bir \textbf{sonraki} instruction'ın adresinden ölçülür
+(CPU branch'i execute ederken PC zaten bir sonraki instruction'ı gösterir).
+
+\begin{enumerate}[leftmargin=2em,itemsep=1pt,topsep=2pt]
+\item Branch'in adresi: \tl{0x140001231}; uzunluğu 2 byte (\tl{7D} $+$ rel8).
+\item Bir sonraki instruction'ın adresi: \tl{0x140001231} $+$ 2 $=$ \tl{0x140001233}.
+\item Hedef adres: \tl{0x14000126C} (\tl{xor eax, eax}, döngüden çıkış; s.~69).
+\item Offset $=$ hedef $-$ sonraki $=$ \tl{0x26C} $-$ \tl{0x233} $=$ \tl{0x39} $=$ $+57$.
+\item $-128 \le 57 \le 127$ olduğu için 8 bitlik alan yeterli: rel8 $=$ \tl{0011 1001} $=$
+\tl{0x39}. Machine code: \tl{7D 39}.
+\item Çalışırken: koşul (SF $=$ OF, yani \tl{i} $\ge 24$) sağlanırsa PC $\leftarrow$
+\tl{0x140001233} $+$ \tl{0x39} $=$ \tl{0x14000126C}; sağlanmazsa PC \tl{0x140001233}'te kalır.
+\end{enumerate}
+
+Geriye doğru örnek (\#5 \tl{call}): sonraki adres \tl{0x1400011F3} $+$ 5 $=$
+\tl{0x1400011F8}, hedef \tl{0x1400010D0}; offset $=$ \tl{0x10D0} $-$ \tl{0x11F8} $=$
+$-$\tl{0x128} $= -296$. 32 bitlik iki'ye tümleyen: \tl{0xFFFFFED8}, little-endian
+\tl{D8 FE FF FF}.
+
+\vspace{10pt}
+\hrule
+\vspace{6pt}
+
+\textbf{Ek --- Öğretim üyesine sorular} (gerekçeler ve ölçümler \tl{M1\_Adim0\_Adim1.pdf}'de)
+
+\textbf{1.} Aşama 4'ün izi \tl{/O1} derlemesinden alınabilir mi? Ölçüm: \tl{/Od}'de dinamik bellek
+referanslarının \%83,4'ü stack frame'e aittir (961 / 1152), \tl{/O1}'de ise \%87,9'u gerçek dizi
+erişimidir (152 / 173). Yönergenin öğretim üyesi notları 6.~maddesi bu alternatifi sunuyor.
+
+\textbf{2.} Değişken uzunluklu instruction'larda instruction fetch kaç bus işlemi sayılacak?
+Kernel'in 17 instruction'ı 1--8 byte arasında değişip toplam 68 byte tutuyor. Aksi
+belirtilmedikçe Fig.~3.2 kavramsal modeline uygun olarak \textbf{instruction başına bir fetch bus
+işlemi} varsayacağım (adres $=$ PC, data $=$ instruction'ın kendisi).
+
+\end{document}

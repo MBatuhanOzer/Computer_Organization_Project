@@ -1,6 +1,9 @@
 {
   "version": 3,
-  "cmakeMinimumRequired": { "major": 3, "minor": 21 },
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21
+  },
   "configurePresets": [
     {
       "name": "od",
@@ -11,7 +14,8 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_C_COMPILER": "clang-cl",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_C_FLAGS_RELWITHDEBINFO": "/Zi /Od /Ob0"
+        "CMAKE_C_FLAGS_RELWITHDEBINFO": "/Zi /Od /Ob0",
+        "LISTING_TAG": "O0"
       }
     },
     {
@@ -23,12 +27,21 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_C_COMPILER": "clang-cl",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_C_FLAGS_RELWITHDEBINFO": "/Zi /O1"
+        "CMAKE_C_FLAGS_RELWITHDEBINFO": "/Zi /O1",
+        "LISTING_TAG": "O1"
       }
     }
   ],
   "buildPresets": [
-    { "name": "od", "displayName": "Build /Od", "configurePreset": "od" },
-    { "name": "o1", "displayName": "Build /O1", "configurePreset": "o1" }
+    {
+      "name": "od",
+      "displayName": "Build /Od",
+      "configurePreset": "od"
+    },
+    {
+      "name": "o1",
+      "displayName": "Build /O1",
+      "configurePreset": "o1"
+    }
   ]
 }
