@@ -17,6 +17,8 @@ from pathlib import Path
 TAG = sys.argv[1] if len(sys.argv) > 1 else "O0"
 ROOT = Path(__file__).resolve().parent.parent
 LST = ROOT / "listings"
+BUILD = "build-od" if TAG.startswith("O0") else "build-o1"
+EXE = "rle_v2" if TAG.endswith("_v2") else "rle"
 FUNCS = ("rle_encode", "rle_decode", "main")
 
 
@@ -31,7 +33,7 @@ def parse_asm(path):
             continue
         if func is None:
             continue
-        m = re.search(r"#\s*main\.c:(\d+)", raw)
+        m = re.search(r"#\s*main(?:_v2)?\.c:(\d+)", raw)
         if m and raw.lstrip().startswith(".cv_loc"):
             line = int(m.group(1))
             continue
@@ -75,12 +77,12 @@ def map_starts(path):
 
 
 def main():
-    build = "build-od" if TAG == "O0" else "build-o1"
-    starts = map_starts(ROOT / build / "rle.map")
+    build = BUILD
+    starts = map_starts(ROOT / BUILD / f"{EXE}.map")
     asm = parse_asm(LST / f"asm_{TAG}.s")
     obj = parse_objdump(LST / f"objdump_{TAG}.txt", starts)
 
-    out = [f"# C satiri -> assembly -> adres  ({TAG}, {build}/rle.exe)",
+    out = [f"# C satiri -> assembly -> adres  ({TAG}, {build}/{EXE}.exe)",
            "# sutunlar: C satiri | adres | byte'lar | instruction", ""]
     for f in sorted(asm, key=lambda k: starts.get(k, 0)):
         a, o = asm[f], obj.get(f, [])

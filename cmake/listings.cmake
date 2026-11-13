@@ -1,7 +1,7 @@
 # Asama 2 listeleri: derleyici assembly'si + kendi fonksiyonlarimizin disassembly'si.
 #
 # PE imajinda sembol tablosu yok, bu yuzden disassembly araligi /MAP dosyasindan
-# bulunur: .text (0001) bolumunde main.c.obj'ye ait ilk sembolden, ondan sonra gelen
+# bulunur: .text (0001) bolumunde ${OBJ} dosyasina ait ilk sembolden, ondan sonra gelen
 # en yakin yabanci (CRT) sembole kadar. Map dosyasi public ve static sembolleri ayri
 # bolumlerde listeler; bu yuzden "ilk gorulen" degil, adresce en yakini alinir.
 # Adresler 16 haneli kucuk harfli hex oldugu icin metin karsilastirmasi sayisal
@@ -19,7 +19,7 @@ foreach(l IN LISTS lines)
         continue()
     endif()
     set(addr "${CMAKE_MATCH_1}")
-    if(CMAKE_MATCH_2 STREQUAL "main.c.obj")
+    if(CMAKE_MATCH_2 STREQUAL "${OBJ}")
         if(lo STREQUAL "" OR addr STRLESS lo)
             set(lo "${addr}")
         endif()
@@ -39,7 +39,7 @@ foreach(addr IN LISTS foreign)
 endforeach()
 
 if(lo STREQUAL "" OR hi STREQUAL "")
-    message(FATAL_ERROR "listings: main.c.obj araligi ${MAP} icinde bulunamadi")
+    message(FATAL_ERROR "listings: ${OBJ} araligi ${MAP} icinde bulunamadi")
 endif()
 
 execute_process(

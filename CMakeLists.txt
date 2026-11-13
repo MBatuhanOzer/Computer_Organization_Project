@@ -9,8 +9,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # makinede tekrarlanabilir olsun diye acikca ayarlanir (clang-cl varsayilani da budur).
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 
-add_executable(rle main.c)
+find_program(LLVM_OBJDUMP llvm-objdump REQUIRED)
+set(LISTING_TAG "${CMAKE_BUILD_TYPE}" CACHE STRING "listings/ dosyalarinin soneki (O0 / O1)")
 
+# Proje programlari (rle = main.c, rle_v2 = main_v2.c) ayni sekilde derlenir.
+#
 # Raporun butun adresleri bu uc linker ayarina baglidir:
 #
 #   /DYNAMICBASE:NO   ASLR kapali. Bu olmadan PE imaji her calistirmada farkli bir
@@ -27,26 +30,36 @@ add_executable(rle main.c)
 #                     ve dizileri bulmak bu dosyadan yapilir.
 #
 # /DEBUG, /Zi ile birlikte PDB uretir (Visual Studio'da kaynak seviyesinde stepping).
-target_link_options(rle PRIVATE /DYNAMICBASE:NO /INCREMENTAL:NO /MAP /DEBUG)
-
-# Asama 2 listeleri. Derleyicinin kendi assembly ciktisi her instruction grubunu
-# "# main.c:NN" ile isaretler; 2a'daki C satiri -> assembly eslemesi buradan okunur.
-# /FA yalnizca yan cikti uretir, object kodu degistirmez.
-target_compile_options(rle PRIVATE /FA "/Fa${CMAKE_BINARY_DIR}/rle.s")
-
-# Her derlemeden sonra listings/ altina iki dosya yazilir:
+#
+# Asama 2 listeleri: derleyicinin kendi assembly ciktisi her instruction grubunu
+# "# main.c:NN" ile isaretler (/FA yalnizca yan cikti uretir, object kodu degistirmez).
+# Her derlemeden sonra listings/ altina yazilir:
 #   asm_<TAG>.s       derleyici assembly'si (C satir isaretli)
 #   objdump_<TAG>.txt linklenmis exe'deki kendi fonksiyonlarimizin disassembly'si
-#                     (adres + makine kodu byte'lari; 2c dogrulamasi bununla yapilir)
-find_program(LLVM_OBJDUMP llvm-objdump REQUIRED)
-set(LISTING_TAG "${CMAKE_BUILD_TYPE}" CACHE STRING "listings/ dosyalarinin soneki (O0 / O1)")
-add_custom_command(TARGET rle POST_BUILD
-    COMMAND ${CMAKE_COMMAND}
-            -DMAP=$<TARGET_FILE_DIR:rle>/rle.map
-            -DEXE=$<TARGET_FILE:rle>
-            -DASM=${CMAKE_BINARY_DIR}/rle.s
-            -DOBJDUMP=${LLVM_OBJDUMP}
-            -DOUT=${CMAKE_SOURCE_DIR}/listings
-            -DTAG=${LISTING_TAG}
-            -P ${CMAKE_SOURCE_DIR}/cmake/listings.cmake
-    VERBATIM)
+function(add_program name src tag)
+    add_executable(${name} ${src})
+    target_link_options(${name} PRIVATE /DYNAMICBASE:NO /INCREMENTAL:NO /MAP /DEBUG)
+    target_compile_options(${name} PRIVATE /FA "/Fa${CMAKE_BINARY_DIR}/${name}.s")
+    add_custom_command(TARGET ${name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+                -DMAP=$<TARGET_FILE_DIR:${name}>/${name}.map
+                -DEXE=$<TARGET_FILE:${name}>
+                -DASM=${CMAKE_BINARY_DIR}/${name}.s
+                -DOBJ=${src}.obj
+                -DOBJDUMP=${LLVM_OBJDUMP}
+                -DOUT=${CMAKE_SOURCE_DIR}/listings
+                -DTAG=${tag}
+                -P ${CMAKE_SOURCE_DIR}/cmake/listings.cmake
+        VERBATIM)
+endfunction()
+
+add_program(rle    main.c    "${LISTING_TAG}")
+add_program(rle_v2 main_v2.c "${LISTING_TAG}_v2")   # Asama 4g kod degisikligi
+
+# Asama 4 cache simulatoru (kaynak kodu teslim edilir). Siradan bir clang-cl programi olarak
+# derlenir: listeleme ve sabit adres ayarlari yok, cunku adresleri raporda kullanilmaz.
+# Argumansiz calistirilinca (Visual Studio'da F5) kisiye ozel konfigurasyonu trace.csv uzerinde
+# calistirir (bkz. tools/cachesim.c). _CRT_SECURE_NO_WARNINGS: MSVC CRT'nin standart fopen/sscanf icin verdigi
+# "deprecated" uyarisini kapatir; kod duz C99'dur.
+add_executable(cachesim tools/cachesim.c)
+target_compile_definitions(cachesim PRIVATE _CRT_SECURE_NO_WARNINGS)

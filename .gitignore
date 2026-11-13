@@ -29,3 +29,6 @@ rip_*.txt
 # Instructor-provided source documents (not my work)
 CMPE3209_Proje_Odevi.pdf
 CMPE3209_Proje_Teslim_Tutanagi.pdf
+
+# Debugger tek adim kayitlari (python tools/mktrace.py ile yeniden uretilir, buyuk)
+listings/steps_*.txt
